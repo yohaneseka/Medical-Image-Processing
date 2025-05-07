@@ -268,48 +268,25 @@ if task_choice == "Task 1: Original Methods":
 elif task_choice == "Task 2: Advanced Analysis":
     st.header("Task 2: Advanced Edge Detection Analysis")
     
-    # Select the edge detection method
-    detection_method = st.radio(
-        "Select Edge Detection Method:",
-        ["Canny Edge Detection", "Laplacian Operator"],
-        horizontal=True
-    )
-    
+    # Task 2 settings
+    st.subheader("Canny Edge Detection Pipeline Settings")
     uploaded_file_task2 = st.file_uploader("Upload an image for advanced analysis", type=["jpg", "jpeg", "png"], key="task2_uploader")
     
-    if detection_method == "Canny Edge Detection":
-        # Advanced parameters for Canny
-        st.subheader("Canny Edge Detection Pipeline Settings")
-        st.write("Adjust parameters for the Canny edge detection pipeline:")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            sigma = st.slider("Gaussian Blur Sigma", min_value=0.1, max_value=5.0, value=1.0, step=0.1,
-                             help="Controls the amount of blur. Higher values create more blur.")
-            high_threshold_factor = st.slider("High Threshold Factor", min_value=0.05, max_value=0.3, value=0.15, step=0.01,
-                                            help="Fraction of maximum magnitude to use as high threshold. Higher values detect fewer edges.")
-        
-        with col2:
-            low_threshold_factor = st.slider("Low Threshold Factor", min_value=0.01, max_value=0.99, value=0.05, step=0.01,
-                                           help="Fraction of high threshold to use as low threshold. Controls edge connectivity.")
-            show_all_steps = st.checkbox("Show All Processing Steps", value=True,
-                                      help="Display every step of the Canny edge detection pipeline")
-    else:  # Laplacian Operator
-        st.subheader("Laplacian Operator Settings")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            laplacian_ksize = st.slider("Kernel Size", min_value=1, max_value=7, value=3, step=2,
-                                      help="Size of the Laplacian kernel. Must be odd.")
-            apply_sharpening = st.checkbox("Apply Image Sharpening", value=True,
-                                        help="Use Laplacian for edge sharpening")
-        
-        with col2:
-            sharpening_factor = st.slider("Sharpening Factor", min_value=0.1, max_value=2.0, value=0.5, step=0.1,
-                                        help="Controls the intensity of sharpening. Higher values create sharper images.",
-                                        disabled=not apply_sharpening)
-            show_detail_view = st.checkbox("Show Detail Zoom View", value=True,
-                                        help="Display zoomed detail regions of the results")
+    # Advanced parameters
+    st.write("Adjust parameters for the Canny edge detection pipeline:")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        sigma = st.slider("Gaussian Blur Sigma", min_value=0.1, max_value=5.0, value=1.0, step=0.1,
+                         help="Controls the amount of blur. Higher values create more blur.")
+        high_threshold_factor = st.slider("High Threshold Factor", min_value=0.05, max_value=0.3, value=0.15, step=0.01,
+                                        help="Fraction of maximum magnitude to use as high threshold. Higher values detect fewer edges.")
+    
+    with col2:
+        low_threshold_factor = st.slider("Low Threshold Factor", min_value=0.01, max_value=0.99, value=0.05, step=0.01,
+                                       help="Fraction of high threshold to use as low threshold. Controls edge connectivity.")
+        show_all_steps = st.checkbox("Show All Processing Steps", value=True,
+                                  help="Display every step of the Canny edge detection pipeline")
     
     # Separator between settings and results
     st.markdown("---")
@@ -421,64 +398,17 @@ elif task_choice == "Task 2: Advanced Analysis":
             'hysteresis_img': hysteresis_img,
             'execution_time': execution_time
         }
-        
-    def apply_laplacian_pipeline(image):
-        """
-        Apply Laplacian operator for edge detection and sharpening
-        """
-        start_time = time.time()
-        
-        # Convert image to grayscale if it's color
-        if len(image.shape) > 2:
-            gray_image = color.rgb2gray(image)
-            gray_image = (gray_image * 255).astype(np.uint8)
-        else:
-            gray_image = image
-            
-        # Apply Laplacian operator in X and Y directions
-        laplacian_x = cv2.Laplacian(gray_image, cv2.CV_64F, ksize=laplacian_ksize, delta=0, scale=1, borderType=cv2.BORDER_DEFAULT)
-        laplacian_y = cv2.Laplacian(np.transpose(gray_image), cv2.CV_64F, ksize=laplacian_ksize, delta=0, scale=1, borderType=cv2.BORDER_DEFAULT)
-        laplacian_y = np.transpose(laplacian_y)
-        
-        # Combine for full Laplacian
-        laplacian_xy = laplacian_x + laplacian_y
-        
-        # Normalize for display
-        laplacian_x_norm = cv2.normalize(laplacian_x, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        laplacian_y_norm = cv2.normalize(laplacian_y, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        laplacian_xy_norm = cv2.normalize(laplacian_xy, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        
-        # Calculate Laplacian magnitude (Hasil laplacian)
-        laplacian_magnitude = cv2.Laplacian(gray_image, cv2.CV_64F, ksize=laplacian_ksize)
-        laplacian_magnitude = np.absolute(laplacian_magnitude)
-        laplacian_magnitude_norm = cv2.normalize(laplacian_magnitude, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        
-        # Image sharpening using Laplacian
-        results = {}
-        
-        # XY sharpening (basic)
-        xy_sharpened = gray_image.astype(float) + sharpening_factor * laplacian_xy
-        xy_sharpened = np.clip(xy_sharpened, 0, 255).astype(np.uint8)
-        
-        # Magnitude-based sharpening (more controlled)
-        magnitude_sharpened = gray_image.astype(float) + sharpening_factor * laplacian_magnitude
-        magnitude_sharpened = np.clip(magnitude_sharpened, 0, 255).astype(np.uint8)
-        
-        end_time = time.time()
-        execution_time = end_time - start_time
-        
-        return {
-            'gray_image': gray_image,
-            'laplacian_x': laplacian_x_norm,
-            'laplacian_y': laplacian_y_norm,
-            'laplacian_xy': laplacian_xy_norm,
-            'laplacian_magnitude': laplacian_magnitude_norm,
-            'xy_sharpened': xy_sharpened,
-            'magnitude_sharpened': magnitude_sharpened,
-            'execution_time': execution_time
-        }
     
-subheader("Original Image")
+    # Advanced Results area
+    if uploaded_file_task2 is not None:
+        try:
+            # Read the uploaded image
+            file_bytes = np.asarray(bytearray(uploaded_file_task2.read()), dtype=np.uint8)
+            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # Display original image
+            st.subheader("Original Image")
             st.image(image, use_container_width=True)
             
             # Process with Canny Pipeline
@@ -497,7 +427,7 @@ subheader("Original Image")
                 st.image(results['color_edges'], caption="Edge Direction Colormap", use_column_width=True)
             
             # Display all steps if selected
-            if detection_method == "Canny Edge Detection" and show_all_steps:
+            if show_all_steps:
                 st.subheader("Complete Canny Edge Detection Pipeline")
                 
                 # Create a figure with subplots for visualization
