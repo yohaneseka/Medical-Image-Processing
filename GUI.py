@@ -17,10 +17,10 @@ st.set_page_config(
 st.title("Edge Detection Method Analyzer")
 
 # Create sidebar tabs for Task 1 and Task 2
-task_choice = st.sidebar.radio("Select Task", ["Task 1: Original Methods", "Task 2: Advanced Analysis"])
+task_choice = st.sidebar.radio("Select Task", ["Task 1: Edge Detection", "Task 2: Gaussian and Sharpening"])
 
 # ===================== TASK 1: ORIGINAL CODE =====================
-if task_choice == "Task 1: Original Methods":
+if task_choice == "Task 1: Edge Detection":
     # Settings for Task 1 - No tabs, directly in main area
     st.header("Settings")
     uploaded_file_task1 = st.file_uploader("Upload an image for Task 1", type=["jpg", "jpeg", "png"], key="task1_uploader")
@@ -265,8 +265,8 @@ if task_choice == "Task 1: Original Methods":
         st.info("Please upload an image to start the analysis.")
 
 # ===================== TASK 2: ADVANCED ANALYSIS =====================
-elif task_choice == "Task 2: Advanced Analysis":
-    st.header("Task 2: Advanced Edge Detection Analysis")
+elif task_choice == "Task 2: Gaussian and Sharpening":
+    st.header("Task 2: Gaussian and Sharpening")
     
     # Task 2 settings
     st.subheader("Canny Edge Detection Pipeline Settings")
