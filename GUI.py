@@ -17,10 +17,10 @@ st.set_page_config(
 st.title("Edge Detection Method Analyzer")
 
 # Create sidebar tabs for Task 1 and Task 2
-task_choice = st.sidebar.radio("Select Task", ["Task 1: Edge Detection", "Task 2: Edge Detection & Sharpening"])
+task_choice = st.sidebar.radio("Select Task", ["Task 1: Original Methods", "Task 2: Advanced Analysis"])
 
 # ===================== TASK 1: ORIGINAL CODE =====================
-if task_choice == "Task 1: Edge Detection":
+if task_choice == "Task 1: Original Methods":
     # Settings for Task 1 - No tabs, directly in main area
     st.header("Settings")
     uploaded_file_task1 = st.file_uploader("Upload an image for Task 1", type=["jpg", "jpeg", "png"], key="task1_uploader")
