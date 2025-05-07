@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import time
-from skimage import color
+from skimage import color, filters
 from io import BytesIO
 from PIL import Image
 
@@ -268,20 +268,270 @@ if task_choice == "Task 1: Original Methods":
 elif task_choice == "Task 2: Advanced Analysis":
     st.header("Task 2: Advanced Edge Detection Analysis")
     
-    # Task 2 settings and results in one view
-    st.header("Advanced Settings")
-    uploaded_file_task2 = st.file_uploader("Upload an image for Task 2", type=["jpg", "jpeg", "png"], key="task2_uploader")
+    # Task 2 settings
+    st.subheader("Canny Edge Detection Pipeline Settings")
+    uploaded_file_task2 = st.file_uploader("Upload an image for advanced analysis", type=["jpg", "jpeg", "png"], key="task2_uploader")
     
-    # Placeholder for Task 2 settings
-    st.subheader("Advanced Options")
-    st.text("Task 2 options will be added here")
+    # Advanced parameters
+    st.write("Adjust parameters for the Canny edge detection pipeline:")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        sigma = st.slider("Gaussian Blur Sigma", min_value=0.1, max_value=5.0, value=1.0, step=0.1,
+                         help="Controls the amount of blur. Higher values create more blur.")
+        high_threshold_factor = st.slider("High Threshold Factor", min_value=0.05, max_value=0.3, value=0.15, step=0.01,
+                                        help="Fraction of maximum magnitude to use as high threshold. Higher values detect fewer edges.")
+    
+    with col2:
+        low_threshold_factor = st.slider("Low Threshold Factor", min_value=0.01, max_value=0.99, value=0.05, step=0.01,
+                                       help="Fraction of high threshold to use as low threshold. Controls edge connectivity.")
+        show_all_steps = st.checkbox("Show All Processing Steps", value=True,
+                                  help="Display every step of the Canny edge detection pipeline")
     
     # Separator between settings and results
     st.markdown("---")
     
+    def apply_canny_pipeline(image):
+        """
+        Apply full Canny edge detection pipeline with visualizations of each step
+        """
+        start_time = time.time()
+        
+        # Convert image to grayscale if it's color
+        if len(image.shape) > 2:
+            gray_image = color.rgb2gray(image)
+            gray_image = (gray_image * 255).astype(np.uint8)
+        else:
+            gray_image = image
+        
+        rows, columns = gray_image.shape
+        
+        # Step 2: Apply Gaussian blur
+        gaussian_image = filters.gaussian(gray_image, sigma=sigma, preserve_range=True).astype(np.uint8)
+        
+        # Step 3: Apply Sobel for edge detection (fx and fy)
+        fx = cv2.Sobel(gaussian_image, cv2.CV_64F, 1, 0, ksize=3)
+        fy = cv2.Sobel(gaussian_image, cv2.CV_64F, 0, 1, ksize=3)
+        
+        # Step 4: Calculate Magnitude and Angle
+        magnitude = np.sqrt(fx**2 + fy**2)
+        magnitude_normalized = (magnitude / magnitude.max() * 255).astype(np.uint8)
+        angle = np.arctan2(fy, fx)
+        
+        # Step 5: Create color visualization based on edge direction
+        hsv = np.zeros((rows, columns, 3), dtype=np.uint8)
+        hsv[..., 0] = ((angle + np.pi) / (2 * np.pi) * 180).astype(np.uint8)  # Hue from angle
+        hsv[..., 1] = 255  # Full saturation
+        hsv[..., 2] = np.minimum(magnitude_normalized, 255)  # Value from magnitude
+        color_edges = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+        
+        # Step 6: Non-maximum Suppression
+        def non_max_suppression(magnitude, angle):
+            result = np.zeros_like(magnitude)
+            angle = angle * 180. / np.pi
+            angle[angle < 0] += 180
+            
+            for i in range(1, rows - 1):
+                for j in range(1, columns - 1):
+                    # 0 degrees
+                    if (0 <= angle[i, j] < 22.5) or (157.5 <= angle[i, j] <= 180):
+                        neighbors = [magnitude[i, j-1], magnitude[i, j+1]]
+                    # 45 degrees
+                    elif 22.5 <= angle[i, j] < 67.5:
+                        neighbors = [magnitude[i-1, j+1], magnitude[i+1, j-1]]
+                    # 90 degrees
+                    elif 67.5 <= angle[i, j] < 112.5:
+                        neighbors = [magnitude[i-1, j], magnitude[i+1, j]]
+                    # 135 degrees
+                    else:
+                        neighbors = [magnitude[i-1, j-1], magnitude[i+1, j+1]]
+                    
+                    if magnitude[i, j] >= max(neighbors):
+                        result[i, j] = magnitude[i, j]
+            
+            return result
+        
+        non_max_img = non_max_suppression(magnitude, angle)
+        non_max_normalized = (non_max_img / non_max_img.max() * 255).astype(np.uint8) if non_max_img.max() > 0 else np.zeros_like(non_max_img, dtype=np.uint8)
+        
+        # Step 7: Double Thresholding
+        high_threshold = magnitude.max() * high_threshold_factor
+        low_threshold = high_threshold * low_threshold_factor
+        
+        strong_edges = (non_max_img > high_threshold)
+        weak_edges = (non_max_img >= low_threshold) & (non_max_img <= high_threshold)
+        threshold_img = np.zeros_like(non_max_img, dtype=np.uint8)
+        threshold_img[strong_edges] = 255
+        threshold_img[weak_edges] = 75
+        
+        # Step 8: Hysteresis - connecting weak edges to strong edges
+        def hysteresis(img, weak=75, strong=255):
+            output = np.zeros_like(img)
+            output[img == strong] = strong
+            
+            # Identify weak pixels adjacent to strong pixels
+            indices = np.transpose(np.nonzero(img == weak))
+            for i, j in indices:
+                # Check 8 neighbors
+                if i > 0 and i < img.shape[0]-1 and j > 0 and j < img.shape[1]-1:
+                    neighbors = img[i-1:i+2, j-1:j+2]
+                    if strong in neighbors:
+                        output[i, j] = strong
+            
+            return output
+        
+        hysteresis_img = hysteresis(threshold_img)
+        
+        end_time = time.time()
+        execution_time = end_time - start_time
+        
+        return {
+            'gray_image': gray_image,
+            'gaussian_image': gaussian_image,
+            'fx': fx,
+            'fy': fy,
+            'magnitude': magnitude_normalized,
+            'angle': angle,
+            'color_edges': color_edges,
+            'non_max_img': non_max_normalized,
+            'threshold_img': threshold_img,
+            'hysteresis_img': hysteresis_img,
+            'execution_time': execution_time
+        }
+    
     # Advanced Results area
-    st.header("Advanced Results")
-    st.info("This section will be used for Task 2 implementation results. Please provide details about what you want to implement here.")
+    if uploaded_file_task2 is not None:
+        try:
+            # Read the uploaded image
+            file_bytes = np.asarray(bytearray(uploaded_file_task2.read()), dtype=np.uint8)
+            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # Display original image
+            st.subheader("Original Image")
+            st.image(image, use_container_width=True)
+            
+            # Process with Canny Pipeline
+            with st.spinner("Processing image with Canny edge detection pipeline..."):
+                results = apply_canny_pipeline(image)
+            
+            # Display execution time
+            st.success(f"Processing completed in {results['execution_time']*1000:.2f} ms")
+            
+            # Display final result first
+            st.subheader("Final Canny Edge Detection Result")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(results['hysteresis_img'], caption="After Hysteresis (Final Result)", use_column_width=True)
+            with col2:
+                st.image(results['color_edges'], caption="Edge Direction Colormap", use_column_width=True)
+            
+            # Display all steps if selected
+            if show_all_steps:
+                st.subheader("Complete Canny Edge Detection Pipeline")
+                
+                # Create a figure with subplots for visualization
+                fig, axes = plt.subplots(2, 6, figsize=(20, 10))
+                fig.suptitle('Canny Edge Detection Pipeline Steps', fontsize=16)
+                
+                # First row
+                axes[0, 0].imshow(image)
+                axes[0, 0].set_title('Original')
+                axes[0, 0].axis('off')
+                
+                axes[0, 1].imshow(results['gray_image'], cmap='gray')
+                axes[0, 1].set_title('Grayscale')
+                axes[0, 1].axis('off')
+                
+                axes[0, 2].imshow(results['gaussian_image'], cmap='gray')
+                axes[0, 2].set_title(f'Gaussian (σ={sigma})')
+                axes[0, 2].axis('off')
+                
+                axes[0, 3].imshow(results['fx'], cmap='gray')
+                axes[0, 3].set_title('Horizontal Edges (fx)')
+                axes[0, 3].axis('off')
+                
+                axes[0, 4].imshow(results['fy'], cmap='gray')
+                axes[0, 4].set_title('Vertical Edges (fy)')
+                axes[0, 4].axis('off')
+                
+                axes[0, 5].imshow(results['magnitude'], cmap='gray')
+                axes[0, 5].set_title('Edge Magnitude')
+                axes[0, 5].axis('off')
+                
+                # Second row
+                normalized_angle = ((results['angle'] + np.pi) / (2 * np.pi))
+                axes[1, 0].imshow(normalized_angle, cmap='hsv')
+                axes[1, 0].set_title('Edge Direction')
+                axes[1, 0].axis('off')
+                
+                axes[1, 1].imshow(results['color_edges'])
+                axes[1, 1].set_title('Colorized Edges')
+                axes[1, 1].axis('off')
+                
+                axes[1, 2].imshow(results['non_max_img'], cmap='gray')
+                axes[1, 2].set_title('Non-max Suppression')
+                axes[1, 2].axis('off')
+                
+                axes[1, 3].imshow(results['threshold_img'], cmap='gray')
+                axes[1, 3].set_title(f'Double Threshold\n(H:{high_threshold_factor:.2f}, L:{low_threshold_factor:.2f})')
+                axes[1, 3].axis('off')
+                
+                axes[1, 4].imshow(results['hysteresis_img'], cmap='gray')
+                axes[1, 4].set_title('Hysteresis')
+                axes[1, 4].axis('off')
+                
+                # Make one plot empty
+                axes[1, 5].axis('off')
+                
+                plt.tight_layout()
+                st.pyplot(fig)
+                
+                # Additional step-by-step explanation
+                st.subheader("Understanding the Canny Edge Detection Pipeline")
+                st.write("""
+                The Canny edge detection algorithm is considered the optimal edge detector and follows these steps:
+                
+                1. **Noise Reduction**: The image is smoothed with a Gaussian filter to reduce noise.
+                
+                2. **Gradient Calculation**: Sobel filters compute the horizontal (fx) and vertical (fy) edge gradients.
+                
+                3. **Magnitude & Direction**: Edge magnitude and direction are calculated from the gradients.
+                
+                4. **Non-Maximum Suppression**: Edges are thinned by keeping only local maxima.
+                
+                5. **Double Thresholding**: Edges are classified as strong, weak, or non-edges using two thresholds.
+                
+                6. **Edge Tracking by Hysteresis**: Weak edges connected to strong edges are kept, others discarded.
+                """)
+                
+                # Add parameter explanation
+                st.subheader("Parameter Effects")
+                st.write(f"""
+                - **Sigma ({sigma})**: Controls the amount of blur. Higher values reduce noise but may lose details.
+                
+                - **High Threshold ({high_threshold_factor})**: Determines what is considered a strong edge. Higher values detect fewer edges.
+                
+                - **Low Threshold ({low_threshold_factor} × High Threshold)**: Determines what might be an edge. Lower values include more potential edges.
+                """)
+                
+                # Performance metrics
+                st.subheader("Edge Detection Metrics")
+                metrics_data = {
+                    "Parameter": ["Execution Time", "Edge Pixels (%)", "Strong Edge Pixels (%)", "Weak Edge Pixels (%)"],
+                    "Value": [
+                        f"{results['execution_time']*1000:.2f} ms",
+                        f"{np.count_nonzero(results['hysteresis_img']) / results['hysteresis_img'].size * 100:.2f}%",
+                        f"{np.count_nonzero(results['threshold_img'] == 255) / results['threshold_img'].size * 100:.2f}%",
+                        f"{np.count_nonzero(results['threshold_img'] == 75) / results['threshold_img'].size * 100:.2f}%"
+                    ]
+                }
+                st.table(metrics_data)
+        except Exception as e:
+            st.error(f"An error occurred during processing: {str(e)}")
+            st.info("Please try adjusting the parameters or upload a different image.")
+    else:
+        st.info("Please upload an image to start the advanced edge detection analysis.")
 
 # Footer (shown on all tabs)
 st.markdown("---")
