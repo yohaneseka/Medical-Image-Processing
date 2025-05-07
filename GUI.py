@@ -1,4 +1,4 @@
-import streamlit as st #Oke
+import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
@@ -17,7 +17,7 @@ st.set_page_config(
 st.title("Edge Detection Method Analyzer")
 
 # Create sidebar tabs for Task 1 and Task 2
-task_choice = st.sidebar.radio("Select Task", ["Task 1: Assignment 1", "Task 2: Assignment 2"])
+task_choice = st.sidebar.radio("Select Task", ["Task 1: Original Methods", "Task 2: Advanced Analysis"])
 
 # ===================== TASK 1: ORIGINAL CODE =====================
 if task_choice == "Task 1: Original Methods":
@@ -422,9 +422,9 @@ elif task_choice == "Task 2: Advanced Analysis":
             st.subheader("Final Canny Edge Detection Result")
             col1, col2 = st.columns(2)
             with col1:
-                st.image(results['hysteresis_img'], caption="After Hysteresis (Final Result)", use_container_width=True)
+                st.image(results['hysteresis_img'], caption="After Hysteresis (Final Result)", use_column_width=True)
             with col2:
-                st.image(results['color_edges'], caption="Edge Direction Colormap", use_container_width=True)
+                st.image(results['color_edges'], caption="Edge Direction Colormap", use_column_width=True)
             
             # Display all steps if selected
             if show_all_steps:
