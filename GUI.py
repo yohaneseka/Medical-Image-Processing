@@ -17,7 +17,7 @@ st.set_page_config(
 st.title("Edge Detection Method Analyzer")
 
 # Create sidebar tabs for Task 1 and Task 2
-task_choice = st.sidebar.radio("Select Task", ["Task 1: Original Methods", "Task 2: Advanced Analysis"])
+task_choice = st.sidebar.radio("Select Task", ["Task 1: Assignment 1", "Task 2: Assignment 2"])
 
 # ===================== TASK 1: ORIGINAL CODE =====================
 if task_choice == "Task 1: Original Methods":
