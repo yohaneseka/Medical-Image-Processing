@@ -272,36 +272,58 @@ elif task_choice == "Task 2: Gaussian and Sharpening":
     # Task 2 settings
     st.subheader("Canny Edge Detection Pipeline Settings")
     uploaded_file_task2 = st.file_uploader("Upload an image for advanced analysis", type=["jpg", "jpeg", "png"], key="task2_uploader")
-    
+
     tab1, tab2 = st.tabs(["Canny Edge Detection", "Sharpening"])  
+
     with tab1:
             st.subheader("Canny Edge Detection") 
-            # Advanced parameters
-            st.write("Adjust parameters for the Canny edge detection pipeline:")
-            col1, col2 = st.columns(2)
             
+            # Add implementation selection
+            implementation_type = st.radio(
+                "Implementation Method:",
+                ["Custom Implementation", "Library Implementation", "Comparison (Both)"],
+                horizontal=True
+            )
+            
+            # Create columns for parameters
+            col1, col2, col3 = st.columns(3)
+            
+            # Custom implementation parameters
             with col1:
+                st.write("**Custom Implementation Parameters:**")
                 sigma = st.slider("Gaussian Blur Sigma", min_value=0.1, max_value=5.0, value=1.0, step=0.1,
                                 help="Controls the amount of blur. Higher values create more blur.")
                 kernel_size = st.slider("Kernel Size", min_value=3, max_value=15, value=5, step=2,
                                 help="Size of the Gaussian kernel. Must be odd number.")
                                 
             with col2:
+                st.write("**Custom Threshold Parameters:**")
                 thlo = st.slider("Low Threshold", min_value=1, max_value=50, value=10, step=1,
                             help="Low threshold for edge detection. Lower values include more potential edges.")
                 thhi = st.slider("High Threshold", min_value=10, max_value=100, value=23, step=1,
                                         help="High threshold for edge detection. Higher values detect fewer edges.")
-                show_all_steps = st.checkbox("Show All Processing Steps", value=True,
-                                        help="Display every step of the Canny edge detection pipeline")
             
-            # Add T parameter (Gaussian truncation)
+            with col3:
+                st.write("**Library Implementation Parameters:**")
+                lib_sigma = st.slider("Library Gaussian Sigma", min_value=0.1, max_value=5.0, value=1.0, step=0.1,
+                            help="Sigma parameter for library implementation")
+                lib_low = st.slider("Library Low Threshold", min_value=10, max_value=150, value=50, step=5,
+                            help="Low threshold for Canny edge detector library implementation")
+                lib_high = st.slider("Library High Threshold", min_value=50, max_value=250, value=150, step=5,
+                            help="High threshold for Canny edge detector library implementation")
+                lib_aperture = st.selectbox("Library Aperture Size", [3, 5, 7], index=0,
+                                help="Aperture size for the Sobel operator in library implementation")
+            
+            # Additional parameters and display options
             T = st.slider("Gaussian Truncation (T)", min_value=0.01, max_value=0.5, value=0.3, step=0.01,
                         help="Truncation factor for Gaussian kernel generation")
+            show_all_steps = st.checkbox("Show All Processing Steps", value=True,
+                                    help="Display every step of the Canny edge detection pipeline")
             
             # Separator between settings and results
             st.markdown("---")
             
-            # Define all utility functions from paste-2.txt
+            # Define all utility functions
             def sHalf(T, sigma):
                 temp = -np.log(T) * 2 * (sigma**2)
                 return np.round(np.sqrt(temp))
@@ -561,125 +583,329 @@ elif task_choice == "Task 2: Gaussian and Sharpening":
                     'execution_time': execution_time
                 }
             
+            # Function to run the library implementation of Canny
+            def apply_library_canny(image):
+                start_time = time.time()
+                
+                # Convert image to grayscale if it's color
+                if len(image.shape) > 2:
+                    gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+                else:
+                    gray_image = image
+                    
+                # Step 1: Apply Gaussian blur (library implementation)
+                gaussian_image = cv2.GaussianBlur(gray_image, (0, 0), lib_sigma)
+                
+                # Step 2: Calculate gradients using Sobel (library implementation)
+                fx = cv2.Sobel(gaussian_image, cv2.CV_64F, 1, 0, ksize=lib_aperture)
+                fy = cv2.Sobel(gaussian_image, cv2.CV_64F, 0, 1, ksize=lib_aperture)
+                
+                # Step 3: Calculate magnitude and angle
+                magnitude = np.sqrt(fx**2 + fy**2)
+                magnitude = (magnitude / magnitude.max() * 255).astype(np.uint8) if magnitude.max() > 0 else magnitude
+                angle = np.arctan2(fy, fx) * 180 / np.pi
+                
+                # Step 4: Apply Canny edge detection (library implementation)
+                canny_edges = cv2.Canny(gaussian_image, lib_low, lib_high, apertureSize=lib_aperture)
+                
+                # Create color visualization for edges based on direction
+                hsv = np.zeros((gray_image.shape[0], gray_image.shape[1], 3), dtype=np.uint8)
+                hsv[..., 0] = ((angle + 180) / 360 * 180).astype(np.uint8)  # Hue from angle
+                hsv[..., 1] = 255  # Full saturation
+                hsv[..., 2] = np.minimum(magnitude, 255)  # Value from magnitude
+                color_edges = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+                
+                # Apply mask to only show colors where edges are detected
+                for i in range(3):
+                    color_edges[..., i] = color_edges[..., i] * (canny_edges > 0)
+                
+                end_time = time.time()
+                execution_time = end_time - start_time
+                
+                # Normalize fx and fy for visualization
+                fx_normalized = ((fx - fx.min()) / (fx.max() - fx.min()) * 255).astype(np.uint8) if fx.max() > fx.min() else np.zeros_like(fx, dtype=np.uint8)
+                fy_normalized = ((fy - fy.min()) / (fy.max() - fy.min()) * 255).astype(np.uint8) if fy.max() > fy.min() else np.zeros_like(fy, dtype=np.uint8)
+                
+                return {
+                    'gray_image': gray_image,
+                    'gaussian_image': gaussian_image,
+                    'fx': fx_normalized,
+                    'fy': fy_normalized,
+                    'magnitude': magnitude,
+                    'angle': angle,
+                    'canny_edges': canny_edges,
+                    'color_edges': color_edges,
+                    'execution_time': execution_time
+                }
+            
             # Advanced Results area
             if uploaded_file_task2 is not None:
                 try:
                     # Read the uploaded image
                     file_bytes = np.asarray(bytearray(uploaded_file_task2.read()), dtype=np.uint8)
                     image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-                    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                     
-                    # Display original image
-                    st.subheader("Original Image")
-                    st.image(image, use_container_width=True)
+                    # Reset file pointer for potential reuse in other tabs
+                    uploaded_file_task2.seek(0)
                     
-                    # Process with Canny Pipeline
-                    with st.spinner("Processing image with Canny edge detection pipeline..."):
-                        results = apply_canny_pipeline(image)
+                    if image is None:
+                        st.error("Failed to decode the image. Please try another file.")
+                    else:
+                        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                     
-                    # Display execution time
-                    st.success(f"Processing completed in {results['execution_time']*1000:.2f} ms")
+                        # Display original image
+                        st.subheader("Original Image")
+                        st.image(image, use_container_width=True)
+                        
+                        # Initialize variables to avoid reference errors
+                        custom_results = None
+                        lib_results = None
+                        
+                        # Process based on selected implementation
+                        if implementation_type == "Custom Implementation" or implementation_type == "Comparison (Both)":
+                            # Process with Custom Canny Pipeline
+                            with st.spinner("Processing image with custom Canny edge detection..."):
+                                custom_results = apply_canny_pipeline(image)
+                            
+                            # Display execution time
+                            st.success(f"Custom processing completed in {custom_results['execution_time']*1000:.2f} ms")
+                        
+                        if implementation_type == "Library Implementation" or implementation_type == "Comparison (Both)":
+                            # Process with Library Implementation
+                            with st.spinner("Processing image with library Canny edge detection..."):
+                                lib_results = apply_library_canny(image)
+                            
+                            # Display execution time
+                            st.success(f"Library processing completed in {lib_results['execution_time']*1000:.2f} ms")
+                        
+                        # Display results based on implementation type
+                        if implementation_type == "Custom Implementation":
+                            # Display final result
+                            st.subheader("Custom Canny Edge Detection Result")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.image(custom_results['hysteresis_img'], caption="After Hysteresis (Final Result)", use_container_width=True)
+                            with col2:
+                                st.image(custom_results['color_edges'], caption="Edge Direction Colormap", use_container_width=True)
+                            
+                            # Display all steps if selected
+                            if show_all_steps:
+                                st.subheader("Complete Custom Canny Edge Detection Pipeline")
+                                
+                                # Create a figure with subplots for visualization
+                                fig, axes = plt.subplots(2, 6, figsize=(20, 10))
+                                fig.suptitle('Custom Canny Edge Detection Pipeline Steps', fontsize=16)
+                                
+                                # First row
+                                axes[0, 0].imshow(image)
+                                axes[0, 0].set_title('Original')
+                                axes[0, 0].axis('off')
+                                
+                                axes[0, 1].imshow(custom_results['gray_image'], cmap='gray')
+                                axes[0, 1].set_title('Grayscale')
+                                axes[0, 1].axis('off')
+                                
+                                axes[0, 2].imshow(custom_results['gaussian_image'], cmap='gray')
+                                axes[0, 2].set_title(f'Gaussian (σ={sigma})')
+                                axes[0, 2].axis('off')
+                                
+                                axes[0, 3].imshow(custom_results['fx'], cmap='gray')
+                                axes[0, 3].set_title('Horizontal Edges (fx)')
+                                axes[0, 3].axis('off')
+                                
+                                axes[0, 4].imshow(custom_results['fy'], cmap='gray')
+                                axes[0, 4].set_title('Vertical Edges (fy)')
+                                axes[0, 4].axis('off')
+                                
+                                axes[0, 5].imshow(custom_results['magnitude'], cmap='gray')
+                                axes[0, 5].set_title('Edge Magnitude')
+                                axes[0, 5].axis('off')
+                                
+                                # Second row
+                                normalized_angle = ((custom_results['angle']) / 360)
+                                axes[1, 0].imshow(normalized_angle, cmap='gray')
+                                axes[1, 0].set_title('Angle')
+                                axes[1, 0].axis('off')
+                                
+                                axes[1, 1].imshow(custom_results['color_edges'])
+                                axes[1, 1].set_title('Colorized Edges')
+                                axes[1, 1].axis('off')
+                                
+                                axes[1, 2].imshow(custom_results['non_max_img'], cmap='gray')
+                                axes[1, 2].set_title('Non-max Suppression')
+                                axes[1, 2].axis('off')
+                                
+                                axes[1, 3].imshow(custom_results['threshold_img'], cmap='gray')
+                                axes[1, 3].set_title(f'Double Threshold\n(Hi:{thhi}, Lo:{thlo})')
+                                axes[1, 3].axis('off')
+                                
+                                axes[1, 4].imshow(custom_results['hysteresis_img'], cmap='gray')
+                                axes[1, 4].set_title('Hysteresis')
+                                axes[1, 4].axis('off')
+                                
+                                # Make one plot for kernel visualization
+                                gauss_kernel = gaussian_kernel(kernel_size, sigma)
+                                axes[1, 5].imshow(gauss_kernel, cmap='viridis')
+                                axes[1, 5].set_title(f'Gaussian Kernel\n(size={kernel_size}, σ={sigma})')
+                                axes[1, 5].axis('off')
+                                
+                                plt.tight_layout()
+                                st.pyplot(fig)
+                                
+                                # Performance metrics
+                                st.subheader("Edge Detection Metrics")
+                                metrics_data = {
+                                    "Parameter": ["Execution Time", "Edge Pixels (%)", "Strong Edge Pixels (%)", "Weak Edge Pixels (%)"],
+                                    "Value": [
+                                        f"{custom_results['execution_time']*1000:.2f} ms",
+                                        f"{np.count_nonzero(custom_results['hysteresis_img']) / custom_results['hysteresis_img'].size * 100:.2f}%",
+                                        f"{np.count_nonzero(custom_results['threshold_img'] == 255) / custom_results['threshold_img'].size * 100:.2f}%",
+                                        f"{np.count_nonzero(custom_results['threshold_img'] == 128) / custom_results['threshold_img'].size * 100:.2f}%"
+                                    ]
+                                }
+                                st.table(metrics_data)
+                                
+                                # Color direction legend
+                                st.subheader("Edge Direction Color Legend")
+                                legend_data = {
+                                    "Direction": ["0° (Horizontal)", "45° (Diagonal)", "90° (Vertical)", "135° (Diagonal)"],
+                                    "Color": ["Yellow", "Green", "Blue", "Magenta"],
+                                    "Meaning": ["East-West edges", "Northeast-Southwest edges", "North-South edges", "Northwest-Southeast edges"]
+                                }
+                                st.table(legend_data)
+
+                        elif implementation_type == "Library Implementation":
+                            # Display final result
+                            st.subheader("Library Canny Edge Detection Result")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.image(lib_results['canny_edges'], caption=f"Library Canny (Low={lib_low}, High={lib_high})", use_container_width=True)
+                            with col2:
+                                st.image(lib_results['color_edges'], caption="Edge Direction Colormap", use_container_width=True)
+                            
+                            # Display all steps if selected
+                            if show_all_steps:
+                                st.subheader("Complete Library Canny Edge Detection Pipeline")
+                                
+                                # Create a figure with subplots for visualization
+                                fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+                                fig.suptitle('Library Canny Edge Detection Pipeline Steps', fontsize=16)
+                                
+                                # First row
+                                axes[0, 0].imshow(image)
+                                axes[0, 0].set_title('Original')
+                                axes[0, 0].axis('off')
+                                
+                                axes[0, 1].imshow(lib_results['gray_image'], cmap='gray')
+                                axes[0, 1].set_title('Grayscale')
+                                axes[0, 1].axis('off')
+                                
+                                axes[0, 2].imshow(lib_results['gaussian_image'], cmap='gray')
+                                axes[0, 2].set_title(f'Gaussian (σ={lib_sigma})')
+                                axes[0, 2].axis('off')
+                                
+                                # Second row
+                                axes[1, 0].imshow(lib_results['magnitude'], cmap='gray')
+                                axes[1, 0].set_title('Gradient Magnitude')
+                                axes[1, 0].axis('off')
+                                
+                                axes[1, 1].imshow(lib_results['canny_edges'], cmap='gray')
+                                axes[1, 1].set_title(f'Canny Edges\n(Low={lib_low}, High={lib_high})')
+                                axes[1, 1].axis('off')
+                                
+                                axes[1, 2].imshow(lib_results['color_edges'])
+                                axes[1, 2].set_title('Colorized Edges')
+                                axes[1, 2].axis('off')
+                                
+                                plt.tight_layout()
+                                st.pyplot(fig)
+                                
+                                # Performance metrics
+                                st.subheader("Edge Detection Metrics")
+                                metrics_data = {
+                                "Parameter": ["Execution Time", "Edge Pixels (%)"],
+                                "Value": [
+                                    f"{lib_results['execution_time']*1000:.2f} ms",
+                                    f"{np.count_nonzero(lib_results['canny_edges']) / lib_results['canny_edges'].size * 100:.2f}%"
+                                ]
+                            }
+                            st.table(metrics_data)
+
+                        else:  # Comparison mode
+                            # Display comparison of results
+                            st.subheader("Comparison: Custom vs Library Implementation")
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.image(custom_results['hysteresis_img'], caption="Custom Implementation", use_container_width=True)
+                            
+                            with col2:
+                                st.image(lib_results['canny_edges'], caption="Library Implementation", use_container_width=True)
+                            
+                            # Display execution time comparison
+                            st.subheader("Performance Comparison")
+                            performance_data = {
+                                "Implementation": ["Custom", "Library"],
+                                "Execution Time": [
+                                    f"{custom_results['execution_time']*1000:.2f} ms",
+                                    f"{lib_results['execution_time']*1000:.2f} ms"
+                                ],
+                                "Edge Pixels (%)": [
+                                    f"{np.count_nonzero(custom_results['hysteresis_img']) / custom_results['hysteresis_img'].size * 100:.2f}%",
+                                    f"{np.count_nonzero(lib_results['canny_edges']) / lib_results['canny_edges'].size * 100:.2f}%"
+                                ]
+                            }
+                            st.table(performance_data)
+                            
+                            if show_all_steps:
+                                # Side by side comparison of all steps
+                                st.subheader("Side by Side Pipeline Comparison")
+                                
+                                # Create comparison tabs
+                                compare_tabs = st.tabs(["Original", "Gaussian", "Gradients", "Edges"])
+                                
+                                with compare_tabs[0]:
+                                    c1, c2 = st.columns(2)
+                                    with c1:
+                                        st.image(image, caption="Original Image", use_container_width=True)
+                                    with c2:
+                                        st.image(custom_results['gray_image'], caption="Grayscale", use_container_width=True)
+                                
+                                with compare_tabs[1]:
+                                    c1, c2 = st.columns(2)
+                                    with c1:
+                                        st.image(custom_results['gaussian_image'], caption=f"Custom Gaussian (σ={sigma})", use_container_width=True)
+                                    with c2:
+                                        st.image(lib_results['gaussian_image'], caption=f"Library Gaussian (σ={lib_sigma})", use_container_width=True)
+                                
+                                with compare_tabs[2]:
+                                    c1, c2 = st.columns(2)
+                                    with c1:
+                                        st.image(custom_results['magnitude'], caption="Custom Gradient Magnitude", use_container_width=True)
+                                    with c2:
+                                        st.image(lib_results['magnitude'], caption="Library Gradient Magnitude", use_container_width=True)
+                                
+                                with compare_tabs[3]:
+                                    c1, c2 = st.columns(2)
+                                    with c1:
+                                        st.image(custom_results['color_edges'], caption="Custom Edge Directions", use_container_width=True)
+                                    with c2:
+                                        st.image(lib_results['color_edges'], caption="Library Edge Directions", use_container_width=True)
+                                
+                                # Technical comparison
+                                st.subheader("Technical Parameters Comparison")
+                                tech_data = {
+                                    "Parameter": ["Gaussian Sigma", "Kernel Size", "Low Threshold", "High Threshold"],
+                                    "Custom Implementation": [f"{sigma}", f"{kernel_size}x{kernel_size}", f"{thlo}", f"{thhi}"],
+                                    "Library Implementation": [f"{lib_sigma}", f"{lib_aperture}x{lib_aperture}", f"{lib_low}", f"{lib_high}"]
+                                }
+                                st.table(tech_data)
                     
-                    # Display final result first
-                    st.subheader("Final Canny Edge Detection Result")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.image(results['hysteresis_img'], caption="After Hysteresis (Final Result)", use_container_width=True)
-                    with col2:
-                        st.image(results['color_edges'], caption="Edge Direction Colormap", use_container_width=True)
-                    
-                    # Display all steps if selected
-                    if show_all_steps:
-                        st.subheader("Complete Canny Edge Detection Pipeline")
-                        
-                        # Create a figure with subplots for visualization
-                        fig, axes = plt.subplots(2, 6, figsize=(20, 10))
-                        fig.suptitle('Canny Edge Detection Pipeline Steps', fontsize=16)
-                        
-                        # First row
-                        axes[0, 0].imshow(image)
-                        axes[0, 0].set_title('Original')
-                        axes[0, 0].axis('off')
-                        
-                        axes[0, 1].imshow(results['gray_image'], cmap='gray')
-                        axes[0, 1].set_title('Grayscale')
-                        axes[0, 1].axis('off')
-                        
-                        axes[0, 2].imshow(results['gaussian_image'], cmap='gray')
-                        axes[0, 2].set_title(f'Gaussian (σ={sigma})')
-                        axes[0, 2].axis('off')
-                        
-                        axes[0, 3].imshow(results['fx'], cmap='gray')
-                        axes[0, 3].set_title('Horizontal Edges (fx)')
-                        axes[0, 3].axis('off')
-                        
-                        axes[0, 4].imshow(results['fy'], cmap='gray')
-                        axes[0, 4].set_title('Vertical Edges (fy)')
-                        axes[0, 4].axis('off')
-                        
-                        axes[0, 5].imshow(results['magnitude'], cmap='gray')
-                        axes[0, 5].set_title('Edge Magnitude')
-                        axes[0, 5].axis('off')
-                        
-                        # Second row
-                        normalized_angle = ((results['angle']) / 360)
-                        axes[1, 0].imshow(normalized_angle, cmap='gray')
-                        axes[1, 0].set_title('Angle')
-                        axes[1, 0].axis('off')
-                        
-                        axes[1, 1].imshow(results['color_edges'])
-                        axes[1, 1].set_title('Colorized Edges')
-                        axes[1, 1].axis('off')
-                        
-                        axes[1, 2].imshow(results['non_max_img'], cmap='gray')
-                        axes[1, 2].set_title('Non-max Suppression')
-                        axes[1, 2].axis('off')
-                        
-                        axes[1, 3].imshow(results['threshold_img'], cmap='gray')
-                        axes[1, 3].set_title(f'Double Threshold\n(Hi:{thhi}, Lo:{thlo})')
-                        axes[1, 3].axis('off')
-                        
-                        axes[1, 4].imshow(results['hysteresis_img'], cmap='gray')
-                        axes[1, 4].set_title('Hysteresis')
-                        axes[1, 4].axis('off')
-                        
-                        # Make one plot for kernel visualization
-                        gauss_kernel = gaussian_kernel(kernel_size, sigma)
-                        axes[1, 5].imshow(gauss_kernel, cmap='viridis')
-                        axes[1, 5].set_title(f'Gaussian Kernel\n(size={kernel_size}, σ={sigma})')
-                        axes[1, 5].axis('off')
-                        
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        
-                        # Performance metrics
-                        st.subheader("Edge Detection Metrics")
-                        metrics_data = {
-                            "Parameter": ["Execution Time", "Edge Pixels (%)", "Strong Edge Pixels (%)", "Weak Edge Pixels (%)"],
-                            "Value": [
-                                f"{results['execution_time']*1000:.2f} ms",
-                                f"{np.count_nonzero(results['hysteresis_img']) / results['hysteresis_img'].size * 100:.2f}%",
-                                f"{np.count_nonzero(results['threshold_img'] == 255) / results['threshold_img'].size * 100:.2f}%",
-                                f"{np.count_nonzero(results['threshold_img'] == 128) / results['threshold_img'].size * 100:.2f}%"
-                            ]
-                        }
-                        st.table(metrics_data)
-                        
-                        # Color direction legend
-                        st.subheader("Edge Direction Color Legend")
-                        legend_data = {
-                            "Direction": ["0° (Horizontal)", "45° (Diagonal)", "90° (Vertical)", "135° (Diagonal)"],
-                            "Color": ["Yellow", "Green", "Blue", "Magenta"],
-                            "Meaning": ["East-West edges", "Northeast-Southwest edges", "North-South edges", "Northwest-Southeast edges"]
-                        }
-                        st.table(legend_data)
-                        
                 except Exception as e:
-                    st.error(f"An error occurred during processing: {str(e)}")
-                    st.info("Please try adjusting the parameters or upload a different image.")
+                    st.error(f"Error processing the image: {str(e)}")
+                    st.exception(e)
             else:
-                st.info("Please upload an image to start the advanced edge detection analysis.")
-                
+                st.info("Please upload an image in the sidebar to visualize Canny edge detection.")
     with tab2:
         st.subheader("Sharpening")
         # Advanced parameters
