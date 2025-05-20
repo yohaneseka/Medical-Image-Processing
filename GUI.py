@@ -1488,7 +1488,8 @@ with tab3:
                 circle_data = []
                 for i, (x, y, r) in enumerate(circles_lib):
                     circle_data.append({"Circle": i+1, "Center X": int(x), "Center Y": int(y), "Radius": int(r)})
-                st.table(circle_data)else:
+                st.table(circle_data)
+else:
     # Display message when no image is uploaded
     for tab in [tab1, tab2, tab3]:
         with tab:
