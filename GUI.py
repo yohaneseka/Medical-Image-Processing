@@ -1258,7 +1258,7 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
                 return result_image, accumulator, edges, len(lines)
 
             def hough_line_library(gray_image, threshold=200):
-                edges = cv2.Canny(gray_image, 30, 70)
+                edges = cv2.Canny(gray_image, 50, 150)
                 lines = cv2.HoughLines(edges, 1, np.pi / 180, threshold)
 
                 result_image = cv2.cvtColor(gray_image, cv2.COLOR_GRAY2BGR)
