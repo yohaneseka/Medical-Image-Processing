@@ -1339,11 +1339,156 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
         else:
             st.write("Please upload an image for line detection.")
         
-    with tab3:
+   with tab3:
         st.subheader("Circle Detection")
-        st.write("Circle detection functionality will be implemented here")
-        # Add your circle detection code here
-else:
+        
+        # Separate file uploader for circle detection
+        uploaded_file_circle = st.file_uploader("Upload an image for circle detection", type=["jpg", "jpeg", "png"], key="circle_uploader")
+        
+        if uploaded_file_circle is not None:
+            # Read image
+            file_bytes = np.asarray(bytearray(uploaded_file_circle.read()), dtype=np.uint8)
+            circle_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            gray_circle = cv2.cvtColor(circle_image, cv2.COLOR_BGR2GRAY)
+            
+            # Add edge detection for the manual Hough transform
+            blur = cv2.GaussianBlur(gray_circle, (5, 5), 0)
+            edges = cv2.Canny(blur, 50, 150)
+            
+            # Parameters for circle detection
+            radius = st.slider("Circle Radius", min_value=0, max_value=100, step=10, value=25)
+            threshold = st.slider("Threshold", min_value=0, max_value=200, step=10, value=150)
+            
+            # Define Hough circle detection functions
+            def hough_circle_accumulator(edges, radius):
+                height, width = edges.shape
+                accumulator = np.zeros((height, width), dtype=np.uint64)
+                ys, xs = np.nonzero(edges)
+            
+                for x, y in zip(xs, ys):
+                    for theta in range(0, 360):
+                        t = np.deg2rad(theta)
+                        a = int(x - radius * np.cos(t))
+                        b = int(y - radius * np.sin(t))
+                        if 0 <= a < width and 0 <= b < height:
+                            accumulator[b, a] += 1
+            
+                return accumulator
+            
+            def detect_circles(accumulator, threshold, radius):
+                centers = np.argwhere(accumulator > threshold)
+                circles = [(x, y, radius) for y, x in centers]
+                return circles
+            
+            def draw_circles(image, circles, color=(0, 255, 0)):
+                output = np.stack([image]*3, axis=-1) if len(image.shape) == 2 else image.copy()
+                for x, y, r in circles:
+                    # Pertebal lingkaran menjadi 2 piksel
+                    cv2.circle(output, (x, y), r, color, 2)
+                    # Tambahkan titik tengah lingkaran
+                    cv2.circle(output, (x, y), 3, (0, 0, 255), -1)  # Titik berwarna merah
+                return output
+            
+            def hough_circle_library(gray, minRadius, maxRadius, param1=100, param2=30):
+                circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1, minDist=10,
+                                           param1=param1, param2=param2,
+                                           minRadius=minRadius, maxRadius=maxRadius)
+                result = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+                if circles is not None:
+                    circles = np.uint16(np.around(circles))
+                    for x, y, r in circles[0]:
+                        # Pertebal lingkaran menjadi 2 piksel
+                        cv2.circle(result, (x, y), r, (255, 0, 0), 2)
+                        # Tambahkan titik tengah lingkaran
+                        cv2.circle(result, (x, y), 3, (0, 0, 255), -1)  # Titik berwarna merah
+                    return result, circles[0]
+                return result, []
+                
+            # Manual Hough transform
+            start_manual = time.time()
+            accumulator = hough_circle_accumulator(edges, radius)
+            manual_circles = detect_circles(accumulator, threshold, radius)
+            result_manual = draw_circles(gray_circle, manual_circles, color=(0, 255, 0))
+            end_manual = time.time()
+            time_manual = end_manual - start_manual
+            
+            # OpenCV built-in Hough Circle detection
+            start_lib = time.time()
+            result_lib, circles_lib = hough_circle_library(gray_circle, minRadius=radius-5, maxRadius=radius+5)
+            end_lib = time.time()
+            time_lib = end_lib - start_lib
+            
+            # Display results
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("Manual Hough Transform")
+                st.image(result_manual, channels="BGR", use_column_width=True)
+                st.write(f"Execution time: {time_manual:.4f} seconds")
+                st.write(f"Circles detected: {len(manual_circles)}")
+                
+            with col2:
+                st.subheader("OpenCV Hough Circles")
+                st.image(result_lib, channels="BGR", use_column_width=True)
+                st.write(f"Execution time: {time_lib:.4f} seconds")
+                st.write(f"Circles detected: {len(circles_lib)}")
+            
+            # Create detailed visualization with matplotlib
+            st.subheader("Detailed Visualization")
+            
+            fig, axes = plt.subplots(2, 3, figsize=(12, 8))
+            
+            # First row
+            axes[0, 0].imshow(gray_circle, cmap='gray')
+            axes[0, 0].set_title('Gray Image')
+            axes[0, 0].axis('off')
+            
+            axes[0, 1].imshow(edges, cmap='gray')
+            axes[0, 1].set_title('Edges (Canny)')
+            axes[0, 1].axis('off')
+            
+            im = axes[0, 2].imshow(accumulator, cmap='hot')
+            axes[0, 2].set_title('Accumulator (Manual)')
+            axes[0, 2].axis('off')
+            plt.colorbar(im, ax=axes[0, 2], shrink=0.8)
+            
+            # Second row
+            axes[1, 0].imshow(cv2.cvtColor(result_manual, cv2.COLOR_BGR2RGB))
+            axes[1, 0].set_title(f'Manual Circles: {len(manual_circles)} \nTime: {time_manual:.4f} sec')
+            axes[1, 0].axis('off')
+            
+            axes[1, 1].imshow(cv2.cvtColor(result_lib, cv2.COLOR_BGR2RGB))
+            axes[1, 1].set_title(f'Library Circles: {len(circles_lib)} \nTime: {time_lib:.4f} sec')
+            axes[1, 1].axis('off')
+            
+            # Keep the last plot empty or use for additional metrics
+            axes[1, 2].axis('off')
+            
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            # Display circle details
+            st.subheader("Circle Detection Details")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("### Manual Circle Details")
+                st.write(f"Accumulator max value: {accumulator.max()}")
+                st.write(f"Number of circles: {len(manual_circles)}")
+                if len(manual_circles) > 0:
+                    circle_data = []
+                    for i, (x, y, r) in enumerate(manual_circles):
+                        circle_data.append({"Circle": i+1, "Center X": x, "Center Y": y, "Radius": r})
+                    st.table(circle_data)
+            
+            with col2:
+                st.write("### OpenCV Circle Details")
+                st.write(f"Number of circles: {len(circles_lib)}")
+                if len(circles_lib) > 0:
+                    circle_data = []
+                    for i, (x, y, r) in enumerate(circles_lib):
+                        circle_data.append({"Circle": i+1, "Center X": int(x), "Center Y": int(y), "Radius": int(r)})
+                    st.table(circle_data)else:
     # Display message when no image is uploaded
     for tab in [tab1, tab2, tab3]:
         with tab:
