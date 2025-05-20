@@ -1134,7 +1134,7 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
         threshold = st.slider("Threshold Value", min_value=100, max_value=10000000, value=101000, step=1000)
        
         if uploaded_corner is not None:
-            file_bytes = np.asarray(bytearray(uploaded_file_task3.read()), dtype=np.uint8)
+            file_bytes = np.asarray(bytearray(uploaded_corner.read()), dtype=np.uint8)
             image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
            
