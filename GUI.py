@@ -1422,13 +1422,13 @@ with tab3:
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Manual Hough Transform")
-            st.image(result_manual, channels="BGR", use_column_width=True)
+            st.image(result_manual, channels="BGR", use_container_width=True)
             st.write(f"Execution time: {time_manual:.4f} seconds")
             st.write(f"Circles detected: {len(manual_circles)}")
             
         with col2:
             st.subheader("OpenCV Hough Circles")
-            st.image(result_lib, channels="BGR", use_column_width=True)
+            st.image(result_lib, channels="BGR", use_container_width=True)
             st.write(f"Execution time: {time_lib:.4f} seconds")
             st.write(f"Circles detected: {len(circles_lib)}")
         
