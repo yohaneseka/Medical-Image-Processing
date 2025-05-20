@@ -1172,8 +1172,7 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
                 img_harris[dst > threshold*dst.max()] = [0, 255, 0]  # Fixed threshold application
                 
                 return img_harris
-            
-            # Process and display results
+                
             start_manual = time.time()
             result_manual = harris_manual(gray, a=a, threshold=threshold)
             end_manual = time.time()
@@ -1184,8 +1183,7 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
             
             time_manual = end_manual - start_manual
             time_lib = end_lib - start_lib
-            
-            # Display original image
+
             st.write("Original Image")
             st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), channels="RGB")
             
@@ -1196,11 +1194,150 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
             # Display library result
             st.write(f"Library Harris Corner Detection (Green) - Time: {time_lib:.4f} seconds")
             st.image(cv2.cvtColor(result_lib, cv2.COLOR_BGR2RGB), channels="RGB")
-    
+
     with tab2:
         st.subheader("Line Detection")
-        st.write("Line detection functionality will be implemented here")
-        # Add your line detection code here
+        
+        # Separate file uploader for line detection
+        uploaded_file_line = st.file_uploader("Upload an image for line detection", type=["jpg", "jpeg", "png"], key="line_uploader")
+        
+        if uploaded_file_line is not None:
+            # Read image
+            file_bytes = np.asarray(bytearray(uploaded_file_line.read()), dtype=np.uint8)
+            line_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            gray_image = cv2.cvtColor(line_image, cv2.COLOR_BGR2GRAY)
+            
+            # Parameters for line detection
+            theta_steps = st.slider("Theta Steps", min_value=90, max_value=500, step=10, value=200)
+            threshold = st.slider("Threshold", min_value=10, max_value=1000, step=10, value=200)
+            
+            # Define Hough line detection functions
+            def hough_line_detection_theoretical(gray_image, theta_steps=200, threshold=200):
+                edges = cv2.Canny(gray_image, 50, 150)
+
+                H, W = edges.shape
+                x_r, y_r = W // 2, H // 2
+
+                m = theta_steps
+                d_theta = np.pi / m
+                theta_vals = np.linspace(0, np.pi, m)
+
+                r_max = int(np.hypot(W, H))
+                d_r = 1
+                n_r = 2 * r_max
+                j_0 = r_max
+
+                accumulator = np.zeros((n_r, m), dtype=np.uint8)
+
+                ys, xs = np.nonzero(edges)
+                for u, v in zip(xs, ys):
+                    for k, theta_k in enumerate(theta_vals):
+                        r_k = (u - x_r) * np.cos(theta_k) + (v - y_r) * np.sin(theta_k)
+                        j = int(round(r_k / d_r)) + j_0
+                        if 0 <= j < n_r:
+                            accumulator[j, k] += 1
+
+                lines = np.argwhere(accumulator > threshold)
+                result_image = cv2.cvtColor(gray_image, cv2.COLOR_GRAY2BGR)
+
+                for j, k in lines:
+                    theta_k = theta_vals[k]
+                    r_k = (j - j_0) * d_r
+
+                    a = np.cos(theta_k)
+                    b = np.sin(theta_k)
+                    x0 = a * r_k + x_r
+                    y0 = b * r_k + y_r
+                    x1 = int(x0 + 1000 * (-b))
+                    y1 = int(y0 + 1000 * (a))
+                    x2 = int(x0 - 1000 * (-b))
+                    y2 = int(y0 - 1000 * (a))
+
+                    cv2.line(result_image, (x1, y1), (x2, y2), (0, 255, 0), 1)
+
+                return result_image, accumulator, edges, len(lines)
+
+            def hough_line_library(gray_image, threshold=200):
+                edges = cv2.Canny(gray_image, 30, 70)
+                lines = cv2.HoughLines(edges, 1, np.pi / 180, threshold)
+
+                result_image = cv2.cvtColor(gray_image, cv2.COLOR_GRAY2BGR)
+                num_lines = 0
+
+                if lines is not None:
+                    num_lines = len(lines)
+                    for rho_theta in lines:
+                        rho, theta = rho_theta[0]
+                        a = np.cos(theta)
+                        b = np.sin(theta)
+                        x0 = a * rho
+                        y0 = b * rho
+                        x1 = int(x0 + 1000 * (-b))
+                        y1 = int(y0 + 1000 * (a))
+                        x2 = int(x0 - 1000 * (-b))
+                        y2 = int(y0 - 1000 * (a))
+
+                        cv2.line(result_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
+
+                return result_image, edges, num_lines
+            
+            # Process and display results
+            start_manual = time.time()
+            result_manual, accumulator, edges_manual, manual_lines = hough_line_detection_theoretical(gray_image, theta_steps, threshold)
+            end_manual = time.time()
+
+            start_lib = time.time()
+            result_lib, edges_lib, lib_lines = hough_line_library(gray_image, threshold)
+            end_lib = time.time()
+
+            time_manual = end_manual - start_manual
+            time_lib = end_lib - start_lib
+            
+            # Display original image
+            st.write("Original Image")
+            st.image(cv2.cvtColor(line_image, cv2.COLOR_BGR2RGB), channels="RGB")
+            
+            # Create columns for comparison
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("Manual Implementation")
+                
+                st.write("Grayscale")
+                st.image(gray_image, channels="GRAY")
+                
+                st.write("Edges")
+                st.image(edges_manual, channels="GRAY")
+                
+                st.write("Accumulator")
+                fig, ax = plt.subplots()
+                ax.imshow(accumulator, cmap='hot', aspect='auto')
+                ax.set_title('Accumulator (Manual)')
+                ax.set_xlabel('Theta')
+                ax.set_ylabel('Rho')
+                st.pyplot(fig)
+                
+                st.write(f"Line Detection Results (Green) - {manual_lines} lines detected")
+                st.write(f"Processing Time: {time_manual:.4f} seconds")
+                st.image(cv2.cvtColor(result_manual, cv2.COLOR_BGR2RGB), channels="RGB")
+            
+            with col2:
+                st.write("Library Implementation")
+                
+                st.write("Grayscale")
+                st.image(gray_image, channels="GRAY")
+                
+                st.write("Edges")
+                st.image(edges_lib, channels="GRAY")
+                
+                st.write("No Accumulator (Library)")
+                
+                st.write(f"Line Detection Results (Blue) - {lib_lines} lines detected")
+                st.write(f"Processing Time: {time_lib:.4f} seconds")
+                st.image(cv2.cvtColor(result_lib, cv2.COLOR_BGR2RGB), channels="RGB")
+                
+        else:
+            st.write("Please upload an image for line detection.")
         
     with tab3:
         st.subheader("Circle Detection")
