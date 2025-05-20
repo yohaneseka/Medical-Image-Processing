@@ -1119,7 +1119,6 @@ elif task_choice == "Task 2: Gaussian and Sharpening":
         else:
             st.info("Please upload an image in the Home tab first.")
 
-
 elif task_choice == "Task 3: Corner, Line, and Circle Detection":
     st.header("Task 3: Corner, Line, and Circle Detection")
     
@@ -1129,24 +1128,16 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
     # Create tabs for different detection methods
     tab1, tab2, tab3 = st.tabs(["Corner Detection", "Line Detection", "Circle Detection"])   
     
-elif task_choice == "Task 3: Corner, Line, and Circle Detection":
-    st.header("Task 3: Corner, Line, and Circle Detection")
-    
-    # Create tabs for different detection methods
-    tab1, tab2, tab3 = st.tabs(["Corner Detection", "Line Detection", "Circle Detection"])   
-    
-    with tab1:
-        st.subheader("Corner Detection")
-        st.write("Adjust parameters for Corner Detection")
+    # Process uploaded image if available
+    if uploaded_file_task3 is not None:
+        # Read image
+        file_bytes = np.asarray(bytearray(uploaded_file_task3.read()), dtype=np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         
-        # Separate file uploader for corner detection
-        uploaded_file_corner = st.file_uploader("Upload an image for corner detection", type=["jpg", "jpeg", "png"], key="corner_uploader")
-        
-        if uploaded_file_corner is not None:
-            # Read image
-            file_bytes = np.asarray(bytearray(uploaded_file_corner.read()), dtype=np.uint8)
-            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        with tab1:
+            st.subheader("Corner Detection")
+            st.write("Adjust parameters for Corner Detection")
             
             # Parameters for corner detection
             a = st.slider("a Value", min_value=0.01, max_value=0.5, value=0.04, step=0.01)
@@ -1210,49 +1201,21 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
             # Display library result
             st.write(f"Library Harris Corner Detection (Green) - Time: {time_lib:.4f} seconds")
             st.image(cv2.cvtColor(result_lib, cv2.COLOR_BGR2RGB), channels="RGB")
-        else:
-            st.write("Please upload an image for corner detection.")
-    
-    with tab2:
-        st.subheader("Line Detection")
         
-        # Separate file uploader for line detection
-        uploaded_file_line = st.file_uploader("Upload an image for line detection", type=["jpg", "jpeg", "png"], key="line_uploader")
-        
-        if uploaded_file_line is not None:
-            # Read image
-            file_bytes = np.asarray(bytearray(uploaded_file_line.read()), dtype=np.uint8)
-            line_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-            
-            # Display original image
-            st.write("Original Image")
-            st.image(cv2.cvtColor(line_image, cv2.COLOR_BGR2RGB), channels="RGB")
-            
-            # Add your line detection code here
+        with tab2:
+            st.subheader("Line Detection")
             st.write("Line detection functionality will be implemented here")
-        else:
-            st.write("Please upload an image for line detection.")
-        
-    with tab3:
-        st.subheader("Circle Detection")
-        
-        # Separate file uploader for circle detection
-        uploaded_file_circle = st.file_uploader("Upload an image for circle detection", type=["jpg", "jpeg", "png"], key="circle_uploader")
-        
-        if uploaded_file_circle is not None:
-            # Read image
-            file_bytes = np.asarray(bytearray(uploaded_file_circle.read()), dtype=np.uint8)
-            circle_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            # Add your line detection code here
             
-            # Display original image
-            st.write("Original Image")
-            st.image(cv2.cvtColor(circle_image, cv2.COLOR_BGR2RGB), channels="RGB")
-            
-            # Add your circle detection code here
+        with tab3:
+            st.subheader("Circle Detection")
             st.write("Circle detection functionality will be implemented here")
-        else:
-            st.write("Please upload an image for circle detection.")
-            
+            # Add your circle detection code here
+    else:
+        # Display message when no image is uploaded
+        for tab in [tab1, tab2, tab3]:
+            with tab:
+                st.write("Please upload an image to perform detection.")
 # Footer (shown on all tabs)
 st.markdown("---")
 st.caption("Edge Detection Analyzer - Created by Yohanes")
