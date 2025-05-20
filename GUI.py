@@ -18,7 +18,7 @@ st.set_page_config(
 st.title("Edge Detection Method Analyzer")
 
 # Create sidebar tabs for Task 1 and Task 2
-task_choice = st.sidebar.radio("Select Task", ["Task 1: Original Methods", "Task 2: Gaussian and Sharpening"])
+task_choice = st.sidebar.radio("Select Task", ["Task 1: Original Methods", "Task 2: Gaussian and Sharpening", "Task 3: Corner, Line, and Circle Detection"])
 
 # ===================== TASK 1: ORIGINAL CODE =====================
 if task_choice == "Task 1: Original Methods":
@@ -1118,7 +1118,18 @@ elif task_choice == "Task 2: Gaussian and Sharpening":
             
         else:
             st.info("Please upload an image in the Home tab first.")
-        
+
+
+elif task_choice == "Task 3: Corner, Line, and Circle Detection":
+    st.header("Task 3: Corner, Line, and Circle Detection")
+    
+    # Task 3 settings
+    st.subheader("Corner, Line, and Circle Detection")
+    tab1, tab2, tab3 = st.tabs(["Corner Detection", "Line Detection", "Circle Detection"])   
+    
+    uploaded_file_task3 = st.file_uploader("Upload an image for advanced analysis", type=["jpg", "jpeg", "png"], key="task3_uploader")
+
+    
 # Footer (shown on all tabs)
 st.markdown("---")
 st.caption("Edge Detection Analyzer - Created by Yohanes")
