@@ -1124,93 +1124,93 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
     
     # Create tabs for different detection methods
     tab1, tab2, tab3 = st.tabs(["Corner Detection", "Line Detection", "Circle Detection"])           
-        with tab1:
-            st.subheader("Corner Detection")
-            st.write("Adjust parameters for Corner Detection")
-            uploaded_corner = st.file_uploader("Upload an image for advanced analysis", type=["jpg", "jpeg", "png"], key="task3_uploader")
-    
-            # Parameters for corner detection
-            a = st.slider("a Value", min_value=0.01, max_value=0.5, value=0.04, step=0.01)
-            threshold = st.slider("Threshold Value", min_value=100, max_value=10000000, value=101000, step=1000)
+    with tab1:
+        st.subheader("Corner Detection")
+        st.write("Adjust parameters for Corner Detection")
+        uploaded_corner = st.file_uploader("Upload an image for advanced analysis", type=["jpg", "jpeg", "png"], key="task3_uploader")
+
+        # Parameters for corner detection
+        a = st.slider("a Value", min_value=0.01, max_value=0.5, value=0.04, step=0.01)
+        threshold = st.slider("Threshold Value", min_value=100, max_value=10000000, value=101000, step=1000)
+       
+        if uploaded_corner is not None:
+            file_bytes = np.asarray(bytearray(uploaded_file_task3.read()), dtype=np.uint8)
+            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
            
-            if uploaded_corner is not None:
-                file_bytes = np.asarray(bytearray(uploaded_file_task3.read()), dtype=np.uint8)
-                image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-               
-                def harris_manual(gray, a=0.5, threshold=1e5):
-                    Ix = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-                    Iy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-                    
-                    Ixx = Ix ** 2
-                    Iyy = Iy ** 2
-                    Ixy = Ix * Iy
-                    
-                    A = cv2.GaussianBlur(Ixx, (3,3), sigmaX=1)
-                    B = cv2.GaussianBlur(Iyy, (3,3), sigmaX=1)
-                    C = cv2.GaussianBlur(Ixy, (3,3), sigmaX=1)
-                    
-                    detM = A * B - C ** 2
-                    trace = A + B
-                    
-                    Q = detM - a * (trace ** 2)
-                    
-                    corners = np.zeros_like(gray)
-                    corners[Q > threshold] = 255
-                    
-                    img_corners = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-                    img_corners[corners == 255] = [255, 0, 0]
-                    
-                    return img_corners
-            
-                def harris_library(gray, a=0.04, threshold=1e5):
-                    gray_float = np.float32(gray)
-                    dst = cv2.cornerHarris(gray_float, blockSize=2, ksize=3, k=a)
-                    dst = cv2.dilate(dst, None)
-                    
-                    img_harris = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-                    img_harris[dst > threshold*dst.max()] = [0, 255, 0]  # Fixed threshold application
-                    
-                    return img_harris
+            def harris_manual(gray, a=0.5, threshold=1e5):
+                Ix = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+                Iy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
                 
-                # Process and display results
-                start_manual = time.time()
-                result_manual = harris_manual(gray, a=a, threshold=threshold)
-                end_manual = time.time()
+                Ixx = Ix ** 2
+                Iyy = Iy ** 2
+                Ixy = Ix * Iy
                 
-                start_lib = time.time()
-                result_lib = harris_library(gray, a=a, threshold=0.01)  # Using relative threshold
-                end_lib = time.time()
+                A = cv2.GaussianBlur(Ixx, (3,3), sigmaX=1)
+                B = cv2.GaussianBlur(Iyy, (3,3), sigmaX=1)
+                C = cv2.GaussianBlur(Ixy, (3,3), sigmaX=1)
                 
-                time_manual = end_manual - start_manual
-                time_lib = end_lib - start_lib
+                detM = A * B - C ** 2
+                trace = A + B
                 
-                # Display original image
-                st.write("Original Image")
-                st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), channels="RGB")
+                Q = detM - a * (trace ** 2)
                 
-                # Display manual result
-                st.write(f"Manual Harris Corner Detection (Red) - Time: {time_manual:.4f} seconds")
-                st.image(cv2.cvtColor(result_manual, cv2.COLOR_BGR2RGB), channels="RGB")
+                corners = np.zeros_like(gray)
+                corners[Q > threshold] = 255
                 
-                # Display library result
-                st.write(f"Library Harris Corner Detection (Green) - Time: {time_lib:.4f} seconds")
-                st.image(cv2.cvtColor(result_lib, cv2.COLOR_BGR2RGB), channels="RGB")
+                img_corners = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+                img_corners[corners == 255] = [255, 0, 0]
+                
+                return img_corners
         
-        with tab2:
-            st.subheader("Line Detection")
-            st.write("Line detection functionality will be implemented here")
-            # Add your line detection code here
+            def harris_library(gray, a=0.04, threshold=1e5):
+                gray_float = np.float32(gray)
+                dst = cv2.cornerHarris(gray_float, blockSize=2, ksize=3, k=a)
+                dst = cv2.dilate(dst, None)
+                
+                img_harris = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+                img_harris[dst > threshold*dst.max()] = [0, 255, 0]  # Fixed threshold application
+                
+                return img_harris
             
-        with tab3:
-            st.subheader("Circle Detection")
-            st.write("Circle detection functionality will be implemented here")
-            # Add your circle detection code here
-    else:
-        # Display message when no image is uploaded
-        for tab in [tab1, tab2, tab3]:
-            with tab:
-                st.write("Please upload an image to perform detection.")
+            # Process and display results
+            start_manual = time.time()
+            result_manual = harris_manual(gray, a=a, threshold=threshold)
+            end_manual = time.time()
+            
+            start_lib = time.time()
+            result_lib = harris_library(gray, a=a, threshold=0.01)  # Using relative threshold
+            end_lib = time.time()
+            
+            time_manual = end_manual - start_manual
+            time_lib = end_lib - start_lib
+            
+            # Display original image
+            st.write("Original Image")
+            st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), channels="RGB")
+            
+            # Display manual result
+            st.write(f"Manual Harris Corner Detection (Red) - Time: {time_manual:.4f} seconds")
+            st.image(cv2.cvtColor(result_manual, cv2.COLOR_BGR2RGB), channels="RGB")
+            
+            # Display library result
+            st.write(f"Library Harris Corner Detection (Green) - Time: {time_lib:.4f} seconds")
+            st.image(cv2.cvtColor(result_lib, cv2.COLOR_BGR2RGB), channels="RGB")
+    
+    with tab2:
+        st.subheader("Line Detection")
+        st.write("Line detection functionality will be implemented here")
+        # Add your line detection code here
+        
+    with tab3:
+        st.subheader("Circle Detection")
+        st.write("Circle detection functionality will be implemented here")
+        # Add your circle detection code here
+else:
+    # Display message when no image is uploaded
+    for tab in [tab1, tab2, tab3]:
+        with tab:
+            st.write("Please upload an image to perform detection.")
 # Footer (shown on all tabs)
 st.markdown("---")
 st.caption("Edge Detection Analyzer - Created by Yohanes")
