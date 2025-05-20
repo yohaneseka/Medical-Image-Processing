@@ -1123,19 +1123,26 @@ elif task_choice == "Task 2: Gaussian and Sharpening":
 elif task_choice == "Task 3: Corner, Line, and Circle Detection":
     st.header("Task 3: Corner, Line, and Circle Detection")
     
-    # Task 3 settings
-    st.subheader("Corner, Line, and Circle Detection")
+    # File uploader outside tabs to be used by all detection methods
+    uploaded_file_task3 = st.file_uploader("Upload an image for advanced analysis", type=["jpg", "jpeg", "png"], key="task3_uploader")
+    
+    # Create tabs for different detection methods
     tab1, tab2, tab3 = st.tabs(["Corner Detection", "Line Detection", "Circle Detection"])   
     
-    uploaded_file_task3 = st.file_uploader("Upload an image for advanced analysis", type=["jpg", "jpeg", "png"], key="task3_uploader")
-    with tab1:
-            st.subheader("Corner Detection")
-            st.write("Adjust parameter for Corner Detection")
-            col1 = st.columns(1)
+    # Process uploaded image if available
+    if uploaded_file_task3 is not None:
+        # Read image
+        file_bytes = np.asarray(bytearray(uploaded_file_task3.read()), dtype=np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         
-            with col1:
-                a = st.slider("a Value", min_value=0, max_value=5.0, value=0.04, step=0.1)
-                threshold = st.slider("Threshold Value", min_value=100, max_value=10000000, value=101000, step=100)
+        with tab1:
+            st.subheader("Corner Detection")
+            st.write("Adjust parameters for Corner Detection")
+            
+            # Parameters for corner detection
+            a = st.slider("a Value", min_value=0.01, max_value=0.5, value=0.04, step=0.01)
+            threshold = st.slider("Threshold Value", min_value=100, max_value=10000000, value=101000, step=1000)
             
             def harris_manual(gray, a=0.5, threshold=1e5):
                 Ix = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
@@ -1168,41 +1175,48 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
                 dst = cv2.dilate(dst, None)
                 
                 img_harris = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-                img_harris[dst > threshold] = [0, 255, 0]
+                img_harris[dst > threshold*dst.max()] = [0, 255, 0]  # Fixed threshold application
                 
                 return img_harris
+            
+            # Process and display results
+            start_manual = time.time()
+            result_manual = harris_manual(gray, a=a, threshold=threshold)
+            end_manual = time.time()
+            
+            start_lib = time.time()
+            result_lib = harris_library(gray, a=a, threshold=0.01)  # Using relative threshold
+            end_lib = time.time()
+            
+            time_manual = end_manual - start_manual
+            time_lib = end_lib - start_lib
+            
+            # Display original image
+            st.write("Original Image")
+            st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), channels="RGB")
+            
+            # Display manual result
+            st.write(f"Manual Harris Corner Detection (Red) - Time: {time_manual:.4f} seconds")
+            st.image(cv2.cvtColor(result_manual, cv2.COLOR_BGR2RGB), channels="RGB")
+            
+            # Display library result
+            st.write(f"Library Harris Corner Detection (Green) - Time: {time_lib:.4f} seconds")
+            st.image(cv2.cvtColor(result_lib, cv2.COLOR_BGR2RGB), channels="RGB")
         
-            def show_comparison(a=0.04, threshold=1e5):
-                start_manual = time.time()
-                result_manual = harris_manual(gray, a=a, threshold=threshold)
-                end_manual = time.time()
-                
-                start_lib = time.time()
-                result_lib = harris_library(gray, a=a, threshold=threshold)
-                end_lib = time.time()
-                
-                time_manual = end_manual - start_manual
-                time_lib = end_lib - start_lib
+        with tab2:
+            st.subheader("Line Detection")
+            st.write("Line detection functionality will be implemented here")
+            # Add your line detection code here
             
-                plt.figure(figsize=(18, 5))
-            
-                plt.subplot(1, 3, 1)
-                plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-                plt.title('Original')
-                plt.axis('off')
-                
-                plt.subplot(1, 3, 2)
-                plt.imshow(cv2.cvtColor(result_manual, cv2.COLOR_BGR2RGB))
-                plt.title(f'Manual Harris (Merah)\nWaktu: {time_manual:.4f} detik')
-                plt.axis('off')
-                
-                plt.subplot(1, 3, 3)
-                plt.imshow(cv2.cvtColor(result_lib, cv2.COLOR_BGR2RGB))
-                plt.title(f'Library Harris (Hijau)\nWaktu: {time_lib:.4f} detik')
-                plt.axis('off')
-                
-                plt.tight_layout()
-                plt.show()
+        with tab3:
+            st.subheader("Circle Detection")
+            st.write("Circle detection functionality will be implemented here")
+            # Add your circle detection code here
+    else:
+        # Display message when no image is uploaded
+        for tab in [tab1, tab2, tab3]:
+            with tab:
+                st.write("Please upload an image to perform detection.")
                 
 # Footer (shown on all tabs)
 st.markdown("---")
