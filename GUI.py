@@ -1516,34 +1516,6 @@ elif task_choice == "Final Project":
     st.header("🔬 FISH and DISH Analyzer")
     st.markdown("---")
     st.subheader("📁 Upload Files")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**Upload Image Files**")
-        uploaded_fish_image = st.file_uploader(
-            "Choose FISH image file", 
-            type=['png', 'jpg', 'jpeg'],
-            key="fish_image"
-        )
-        uploaded_dish_image = st.file_uploader(
-            "Choose DISH image file", 
-            type=['png', 'jpg', 'jpeg'],
-            key="dish_image"
-        )
-    
-    with col2:
-        st.markdown("**Upload Ground Truth Files**")
-        uploaded_fish_gt = st.file_uploader(
-            "Choose FISH Ground Truth file", 
-            type=['png', 'jpg', 'jpeg'],
-            key="fish_gt"
-        )
-        uploaded_dish_gt = st.file_uploader(
-            "Choose DISH Ground Truth file", 
-            type=['png', 'jpg', 'jpeg'],
-            key="dish_gt"
-        )
         
     def load_uploaded_image(uploaded_file):
         if uploaded_file is not None:
@@ -2260,6 +2232,23 @@ elif task_choice == "Final Project":
     
     # ========== FISH ANALYSIS TAB ==========
     with fish_tab:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Upload Image Files**")
+            uploaded_fish_image = st.file_uploader(
+                "Choose FISH image file", 
+                type=['png', 'jpg', 'jpeg'],
+                key="fish_image"
+            )
+           
+        with col2:
+            st.markdown("**Upload Ground Truth Files**")
+            uploaded_fish_gt = st.file_uploader(
+                "Choose FISH Ground Truth file", 
+                type=['png', 'jpg', 'jpeg'],
+                key="fish_gt"
+            )
+        
         if uploaded_fish_image is not None:
             # Load image from uploaded file
             im = load_uploaded_image(uploaded_fish_image)
@@ -2325,7 +2314,21 @@ elif task_choice == "Final Project":
     # ========== DISH ANALYSIS TAB ==========
     with dish_tab:
         st.subheader("Dual In Situ Hybridization (DISH)")
+        col1, col2 = st.columns(2)
+        with col1:
+            uploaded_dish_image = st.file_uploader(
+                "Choose DISH image file", 
+                type=['png', 'jpg', 'jpeg'],
+                key="dish_image"
+            )
         
+        with col2:
+            uploaded_dish_gt = st.file_uploader(
+                "Choose DISH Ground Truth file", 
+                type=['png', 'jpg', 'jpeg'],
+                key="dish_gt"
+            )
+            
         if uploaded_dish_image is not None:
             # Load image from uploaded file
             im2 = load_uploaded_image(uploaded_dish_image)
