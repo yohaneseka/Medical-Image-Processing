@@ -1,12 +1,29 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
 import cv2
+import matplotlib.pyplot as plt
 import pandas as pd
 import time
 from skimage import color, filters
+from skimage.color import label2rgb, rgb2gray
 from io import BytesIO
 from PIL import Image
+from skimage.feature import peak_local_max
+from skimage.segmentation import watershed
+from skimage.measure import regionprops, label  # Correct import
+from skimage.transform import resize
+from skimage.filters import gaussian
+from skimage.segmentation import find_boundaries
+from skimage import exposure,filters, morphology, segmentation, feature, measure, color
+import scipy.ndimage as ndi
+from skimage.morphology import binary_dilation, disk, binary_closing
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from skimage.exposure import equalize_adapthist, rescale_intensity
+from skimage.io import imread
+import os
+import cv2
+import imageio.v2 as imageio
 
 st.set_page_config(
     page_title="Edge Detection Analyzer",
@@ -15,12 +32,10 @@ st.set_page_config(
 )
 
 # Title and description
-st.title("Edge Detection Method Analyzer")
+st.title("Medical Image Processing")
 
-# Create sidebar tabs for Task 1 and Task 2
-task_choice = st.sidebar.radio("Select Task", ["Task 1: Original Methods", "Task 2: Gaussian and Sharpening", "Task 3: Corner, Line, and Circle Detection"])
+task_choice = st.sidebar.radio("Select Task", ["Task 1: Original Methods", "Task 2: Gaussian and Sharpening", "Task 3: Corner, Line, and Circle Detection", "Final Project"])
 
-# ===================== TASK 1: ORIGINAL CODE =====================
 if task_choice == "Task 1: Original Methods":
     # Settings for Task 1 - No tabs, directly in main area
     st.header("Settings")
@@ -1494,6 +1509,956 @@ elif task_choice == "Task 3: Corner, Line, and Circle Detection":
     for tab in [tab1, tab2, tab3]:
         with tab:
             st.write("Please upload an image to perform detection.")
+
+
+            
+elif task_choice == "Final Project":
+    st.header("🔬 FISH and DISH Analyzer")
+    st.markdown("---")
+    st.subheader("📁 Upload Files")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Upload Image Files**")
+        uploaded_fish_image = st.file_uploader(
+            "Choose FISH image file", 
+            type=['png', 'jpg', 'jpeg'],
+            key="fish_image"
+        )
+        uploaded_dish_image = st.file_uploader(
+            "Choose DISH image file", 
+            type=['png', 'jpg', 'jpeg'],
+            key="dish_image"
+        )
+    
+    with col2:
+        st.markdown("**Upload Ground Truth Files**")
+        uploaded_fish_gt = st.file_uploader(
+            "Choose FISH Ground Truth file", 
+            type=['png', 'jpg', 'jpeg'],
+            key="fish_gt"
+        )
+        uploaded_dish_gt = st.file_uploader(
+            "Choose DISH Ground Truth file", 
+            type=['png', 'jpg', 'jpeg'],
+            key="dish_gt"
+        )
+        
+    def load_uploaded_image(uploaded_file):
+        if uploaded_file is not None:
+            # Convert uploaded file to opencv format
+            file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            return image
+        
+        return None   
+    # Create tabs for better organization
+    fish_tab, dish_tab = st.tabs(["🔬 FISH Analysis", "🎨 DISH Analysis"])
+    
+    def plot_histogram_with_image(image, title="Histogram", colormap="gray"):
+        # Buat 2 kolom berdampingan
+        col1, col2 = st.columns(2)
+        # Pastikan image uint8
+        if image.dtype != np.uint8:
+            image_disp = (image * 255).astype(np.uint8) if image.max() <= 1.0 else image.astype(np.uint8)
+        else:
+            image_disp = image
+
+        # Histogram
+        hist = ndi.histogram(image_disp, min=0, max=255, bins=256)
+        # Plot histogram
+        fig, ax = plt.subplots(figsize=(5, 3))
+        ax.plot(hist, color='black')
+        ax.set_title(title)
+        ax.set_xlabel("Intensity Value")
+        ax.set_ylabel("Number of Pixels")
+        ax.grid(True)
+        col1.pyplot(fig)
+        # Gambar sumber
+        col2.image(image_disp, caption="Source Image", use_column_width=True, clamp=True, channels="GRAY")
+
+    def plot_rgb_histogram(image, key_prefix=""):
+        if st.checkbox("Tampilkan Histogram RGB per Channel", key=f"{key_prefix}_rgbhist"):
+            if image.dtype != np.float32 and image.dtype != np.float64:
+                image = image / 255.0
+
+            r = image[:, :, 0]
+            g = image[:, :, 1]
+            b = image[:, :, 2]
+
+            hist_r, bins_r = exposure.histogram(r)
+            hist_g, bins_g = exposure.histogram(g)
+            hist_b, bins_b = exposure.histogram(b)
+
+            fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+
+            axs[0, 0].plot(bins_r, hist_r, color='red')
+            axs[0, 1].plot(bins_g, hist_g, color='green')
+            axs[0, 2].plot(bins_b, hist_b, color='blue')
+
+            axs[1, 0].imshow(r, cmap='gray')
+            axs[1, 1].imshow(g, cmap='gray')
+            axs[1, 2].imshow(b, cmap='gray')
+
+            for i in range(3):
+                axs[0, i].set_title(f'Histogram {"RGB"[i]} Channel')
+                axs[1, i].set_title(f'{"RGB"[i]} Channel Image')
+                axs[0, i].grid(True)
+                axs[1, i].axis('off')
+
+            plt.tight_layout()
+            st.pyplot(fig)
+
+            return r, g, b
+        else:
+            r = image[:, :, 0]
+            g = image[:, :, 1]
+            b = image[:, :, 2]
+            return r, g, b
+
+
+    # --- Image Preprocessing ---
+    def apply_clahe(image_channel, label="CLAHE Result", key_prefix=""):
+        # Slider dengan key unik berdasarkan konteks (FISH/DISH)
+        value_cl = st.slider(
+            "Choose Clip Limit value",
+            min_value=0.001,
+            max_value=0.02,
+            value=0.007,
+            step=0.001,
+            key=f"{key_prefix}_clip_limit"
+        )
+
+        # Terapkan CLAHE
+        im_clahe = exposure.equalize_adapthist(image_channel, clip_limit=value_cl)
+        # Histogram
+        hist_clahe, bins_clahe = exposure.histogram(im_clahe)
+
+        # Plot hasil CLAHE dan histogram
+        fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+        axs[0].imshow(im_clahe, cmap='gray')
+        axs[0].set_title(f'{label}')
+        axs[0].axis('off')
+        axs[1].plot(bins_clahe, hist_clahe, color='black')
+        axs[1].set_title('Histogram after CLAHE')
+        axs[1].set_xlabel('Intensity')
+        axs[1].set_ylabel('Pixel Count')
+        axs[1].grid(True)
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        return im_clahe
+
+    def apply_otsu_threshold(image, title="Otsu Thresholding", is_dish=False):
+        """
+        image       : channel citra grayscale (0-1 atau 0-255)
+        title       : judul plot
+        is_dish     : True jika jenis citra DISH (background putih)
+        """
+        # Pastikan dalam uint8
+        if image.max() <= 1.0:
+            image_uint = (image * 255).astype(np.uint8)
+        else:
+            image_uint = image.astype(np.uint8)
+
+        # Thresholding Otsu
+        thresh_val = filters.threshold_otsu(image_uint)
+        if is_dish:
+            binary_mask = image_uint < thresh_val  # background terang → ambil gelap
+        else:
+            binary_mask = image_uint > thresh_val  # background gelap → ambil terang
+
+        # Plot hasil
+        fig, axs = plt.subplots(1, 3, figsize=(14, 5))
+
+        axs[0].imshow(image_uint, cmap='Blues')
+        axs[0].set_title('Original Channel (uint8)')
+        axs[0].axis('off')
+
+        axs[1].hist(image_uint.ravel(), bins=256, color='blue')
+        axs[1].axvline(thresh_val, color='red', linestyle='--')
+        axs[1].set_title(f'Histogram + Otsu Threshold = {thresh_val:.1f}')
+
+        axs[2].imshow(binary_mask, cmap='gray')
+        axs[2].set_title('Thresholded Mask\n(Foreground = White)')
+        axs[2].axis('off')
+
+        plt.tight_layout()
+        st.pyplot(fig)
+
+        return binary_mask
+
+    def filter_and_label_cells(binary_mask, key_prefix="fish"):
+        st.markdown("### Parameter Filtering dan Morphology")
+        # Slider min size
+        min_obj_size = st.number_input(
+            "Minimum Object Size (remove_small_objects)",
+            min_value=100,
+            max_value=20000,
+            value=8000 if key_prefix == "fish" else 8000,
+            step=100,
+            key=f"{key_prefix}_min_obj"
+        )
+        min_hole_size = st.number_input(
+            "Minimum Hole Size (fill_holes)",
+            min_value=100,
+            max_value=10000,
+            value=1200 if key_prefix == "fish" else 2500,
+            step=100,
+            key=f"{key_prefix}_min_hole"
+        )
+        smooth_radius = st.slider(
+            "Smooth Kontur (Closing Radius)",
+            min_value=0,
+            max_value=10,
+            value=2,
+            step=1,
+            key=f"{key_prefix}_smooth"
+        )
+
+        # Step 1: remove small objects
+        mask_no_small = morphology.remove_small_objects(binary_mask, min_size=min_obj_size)
+        # Step 2: fill holes
+        mask_filled = np.logical_not(
+            morphology.remove_small_objects(np.logical_not(mask_no_small), min_size=min_hole_size))
+        # Step 3: morphological closing (haluskan kontur)
+        if smooth_radius > 0:
+            mask_smoothed = morphology.binary_closing(mask_filled, morphology.disk(smooth_radius))
+        else:
+            mask_smoothed = mask_filled.copy()
+
+        # Labeling
+        labels, nlabels = ndi.label(mask_smoothed)
+        rand_cmap = ListedColormap(np.random.rand(256, 3))
+        labels_for_display = np.where(labels > 0, labels, np.nan)
+
+        # Plot
+        fig, axs = plt.subplots(1, 5, figsize=(20, 5))
+        axs[0].imshow(binary_mask, cmap='gray')
+        axs[0].set_title('Mask Awal (Threshold)')
+        axs[0].axis('off')
+        axs[1].imshow(mask_no_small, cmap='gray')
+        axs[1].set_title('Remove Small Object')
+        axs[1].axis('off')
+        axs[2].imshow(mask_filled, cmap='gray')
+        axs[2].set_title('Fill Holes')
+        axs[2].axis('off')
+        axs[3].imshow(mask_smoothed, cmap='gray')
+        axs[3].set_title('Smoothed (Closing)')
+        axs[3].axis('off')
+        axs[4].imshow(labels_for_display, cmap=rand_cmap)
+        axs[4].set_title(f'Labeled = {nlabels}')
+        axs[4].axis('off')
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        st.success(f"✅ Total objek terdeteksi setelah filtering: **{nlabels} objek**")
+        return mask_smoothed, labels, nlabels
+
+    def watershed_segmentation(image_segmented, image, key_prefix="fish", show_plot=True):
+        st.markdown("### Parameter Watershed")
+
+        # Nilai default disesuaikan berdasarkan jenis citra
+        sigma_default = 1.5 if key_prefix == "fish" else 1.8
+        min_dist_default = 30 if key_prefix == "fish" else 60
+        footprint_default = 20 if key_prefix == "fish" else 21
+
+        sigma = st.slider(
+            "Gaussian Sigma (Smooth Distance Map)",
+            min_value=0.0, max_value=5.0, value=sigma_default, step=0.1,
+            key=f"{key_prefix}_sigma"
+        )
+        min_distance = st.slider(
+            "Minimum Distance antar Seed", min_value=1, max_value=50,
+            value=min_dist_default, step=1,
+            key=f"{key_prefix}_min_distance"
+        )
+        footprint_size = st.slider(
+            "Ukuran Footprint Seed", min_value=1, max_value=30,
+            value=footprint_default, step=1,
+            key=f"{key_prefix}_footprint"
+        )
+
+        # Step 1: Distance transform & Gaussian smoothing
+        distance = ndi.distance_transform_edt(image_segmented)
+        distance_smooth = gaussian(distance, sigma=sigma)
+        # Step 2: Cari koordinat seed (local maxima)
+        coordinates = feature.peak_local_max(
+            distance_smooth,
+            labels=image_segmented,
+            min_distance=min_distance,
+            footprint=np.ones((footprint_size, footprint_size))
+        )
+        # Step 3: Buat mask seed
+        local_maxi = np.zeros_like(distance, dtype=bool)
+        local_maxi[tuple(coordinates.T)] = True
+        # Step 4: Label markers
+        markers = measure.label(local_maxi)
+        # Step 5: Watershed segmentation
+        labels_ws = segmentation.watershed(-distance, markers, mask=image_segmented)
+        # Step 6: Buat boundary dan overlay
+        boundaries = find_boundaries(labels_ws, mode='inner')
+        thick_boundaries = binary_dilation(boundaries, disk(1))
+
+        image_with_lines = image.copy()
+        if image_with_lines.dtype != np.uint8:
+            image_with_lines = (image_with_lines * 255).clip(0, 255).astype(np.uint8)
+        image_with_lines[thick_boundaries] = [255, 255, 0]
+
+        nlabels = len(np.unique(labels_ws)) - 1  # Kurangi background
+        st.success(f"✅ Total objek terdeteksi setelah watershed: {nlabels}")
+        if show_plot:
+            fig, axs = plt.subplots(1, 4, figsize=(18, 6))
+            axs[0].imshow(distance, cmap='magma')
+            axs[0].set_title('Distance Transform')
+            axs[0].axis('off')
+
+            axs[1].imshow(color.label2rgb(labels_ws, image=image, bg_label=0))
+            axs[1].set_title("Watershed Result (Sel Terpisah)")
+            axs[1].axis('off')
+
+            axs[2].imshow(thick_boundaries, cmap='gray')
+            axs[2].set_title("Boundary Lines (Binary)")
+            axs[2].axis('off')
+
+            axs[3].imshow(image_with_lines)
+            axs[3].set_title("Overlay: Watershed Line on Original Image")
+            axs[3].axis('off')
+
+            plt.tight_layout()
+            st.pyplot(fig)
+
+        return labels_ws, thick_boundaries, image_with_lines
+
+    def extract_gt_mask_from_yellow(gt_rgb):
+        r = gt_rgb[:, :, 0]
+        g = gt_rgb[:, :, 1]
+        b = gt_rgb[:, :, 2]
+
+        yellow_mask = (r > 200) & (g > 200) & (b < 100)
+        yellow_mask_dilated = binary_dilation(yellow_mask, disk(1))
+        closed = binary_closing(yellow_mask_dilated, disk(3))
+        gt_mask = ndi.binary_fill_holes(closed)
+        return gt_mask
+
+    def evaluate_segmentation_result(gt_array, segmented_mask):
+        try:
+            # Convert ground truth to binary if needed
+            if len(gt_array.shape) == 3:
+                gt_binary = cv2.cvtColor(gt_array, cv2.COLOR_RGB2GRAY)
+            else:
+                gt_binary = gt_array.copy()
+            
+            # Threshold ground truth to binary
+            _, gt_binary = cv2.threshold(gt_binary, 127, 255, cv2.THRESH_BINARY)
+            gt_binary = gt_binary > 0
+            
+            # Convert segmented mask to boolean if needed
+            if segmented_mask.dtype != bool:
+                segmented_mask = segmented_mask > 0
+            
+            # Ensure same size
+            if gt_binary.shape != segmented_mask.shape:
+                gt_binary = cv2.resize(gt_binary.astype(np.uint8), 
+                                    (segmented_mask.shape[1], segmented_mask.shape[0]))
+                gt_binary = gt_binary > 0
+            
+            # Calculate metrics
+            intersection = np.logical_and(gt_binary, segmented_mask)
+            union = np.logical_or(gt_binary, segmented_mask)
+            
+            # IoU (Intersection over Union)
+            iou = np.sum(intersection) / np.sum(union) if np.sum(union) > 0 else 0
+            
+            # Precision and Recall
+            precision = np.sum(intersection) / np.sum(segmented_mask) if np.sum(segmented_mask) > 0 else 0
+            recall = np.sum(intersection) / np.sum(gt_binary) if np.sum(gt_binary) > 0 else 0
+            
+            # F1 Score
+            f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+            
+            # Accuracy
+            total_pixels = gt_binary.size
+            correct_pixels = np.sum(gt_binary == segmented_mask)
+            accuracy = correct_pixels / total_pixels
+            
+            # Display results in a nice format
+            st.markdown("### 📊 Evaluation Metrics")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("IoU Score", f"{iou:.4f}")
+            with col2:
+                st.metric("Precision", f"{precision:.4f}")
+            with col3:
+                st.metric("Recall", f"{recall:.4f}")
+            with col4:
+                st.metric("F1 Score", f"{f1:.4f}")
+            
+            # Additional metrics
+            col5, col6 = st.columns(2)
+            with col5:
+                st.metric("Accuracy", f"{accuracy:.4f}")
+            with col6:
+                st.metric("Dice Score", f"{f1:.4f}")  # Dice = F1 for binary segmentation
+            
+            # Display comparison images
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+            
+            axes[0].imshow(gt_binary, cmap='gray')
+            axes[0].set_title('Ground Truth')
+            axes[0].axis('off')
+            
+            axes[1].imshow(segmented_mask, cmap='gray')
+            axes[1].set_title('Segmentation Result')
+            axes[1].axis('off')
+            
+            # Overlay comparison
+            overlay = np.zeros((gt_binary.shape[0], gt_binary.shape[1], 3))
+            overlay[:, :, 0] = gt_binary.astype(float)  # Red for ground truth
+            overlay[:, :, 1] = segmented_mask.astype(float)  # Green for segmented
+            overlay[:, :, 2] = intersection.astype(float)  # Blue for intersection
+            
+            axes[2].imshow(overlay)
+            axes[2].set_title('Overlay\n(Red:GT, Green:Seg, Blue:Intersect)')
+            axes[2].axis('off')
+            
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close()
+            
+            # Summary interpretation
+            st.markdown("### 📋 Results Interpretation")
+            if iou > 0.7:
+                st.success("🎉 Excellent segmentation quality!")
+            elif iou > 0.5:
+                st.info("👍 Good segmentation quality")
+            elif iou > 0.3:
+                st.warning("⚠️ Moderate segmentation quality")
+            else:
+                st.error("❌ Poor segmentation quality")
+                
+            # Detailed breakdown
+            with st.expander("📈 Detailed Metrics Explanation"):
+                st.markdown(f"""
+                **IoU (Intersection over Union)**: {iou:.4f}
+                - Measures overlap between predicted and ground truth
+                - Range: 0-1, higher is better
+                
+                **Precision**: {precision:.4f}
+                - Of all pixels predicted as foreground, how many are correct?
+                - Range: 0-1, higher is better
+                
+                **Recall (Sensitivity)**: {recall:.4f}
+                - Of all actual foreground pixels, how many were detected?
+                - Range: 0-1, higher is better
+                
+                **F1 Score**: {f1:.4f}
+                - Harmonic mean of precision and recall
+                - Range: 0-1, higher is better
+                
+                **Accuracy**: {accuracy:.4f}
+                - Overall pixel-wise accuracy
+                - Range: 0-1, higher is better
+                """)
+            
+            return {
+                'iou': iou,
+                'precision': precision,
+                'recall': recall,
+                'f1': f1,
+                'accuracy': accuracy
+            }
+            
+        except Exception as e:
+            st.error(f"Error in evaluation: {str(e)}")
+            st.info("Please check if the ground truth image format is correct")
+            return None
+
+    ## -------- UNTUK ANALISIS SINYAL HER2 DAN CEN17 -----------##
+    def plot_chan_signal (im):
+        # Pastikan image RGB bertipe float 0-1
+        if im.dtype != np.float32 and im.dtype != np.float64:
+            image_rgb = im / 255.0
+        else:
+            image_rgb = im.copy()
+
+        # Ekstrak channel merah (HER2) dan hijau (CEN17)
+        her2_channel = image_rgb[:, :, 0]
+        cen17_channel = image_rgb[:, :, 1]
+        
+        fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+        axs[0].imshow(her2_channel, cmap='Reds')
+        axs[0].set_title("HER2 Channel (Red)")
+        axs[0].axis('off')
+
+        axs[1].imshow(cen17_channel, cmap='Greens')
+        axs[1].set_title("CEN17 Channel (Green)")
+        axs[1].axis('off')
+        plt.tight_layout()
+        st.pyplot(fig)
+        return her2_channel, cen17_channel
+
+    def extract_and_plot_dish_signal_channels(im, cen17_mask_thresh=0.1):
+        # Konversi ke float [0–1] jika perlu
+        image_rgb = im / 255.0 if im.dtype != np.float32 and im.dtype != np.float64 else im.copy()
+        # CEN17: Pink = R - G
+        cen17_channel = np.clip(image_rgb[:, :, 0] - image_rgb[:, :, 1], 0, 1)
+        # Grayscale → sumber HER2
+        grayscale = rgb2gray(image_rgb)
+        # Buat masking → titik yang terlalu merah (CEN17)
+        mask = cen17_channel > cen17_mask_thresh
+        # HER2 = grayscale + suppress CEN17 → diputihkan (1.0)
+        her2_channel = np.copy(grayscale)
+        her2_channel[mask] = 1.0  # diputihkan karena latar belakang putih
+        # Inversi agar sinyal CEN17 menjadi terang (1.0 → 0.0 dan sebaliknya)
+        her2_channel = 1.0 - her2_channel
+        
+        fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+        axs[0].imshow(cen17_channel, cmap='Reds')
+        axs[0].set_title("DISH CEN17 Channel (Red - Green)")
+        axs[0].axis('off')
+        axs[1].imshow(her2_channel, cmap='gray')
+        axs[1].set_title("DISH HER2 Channel (Grayscale - CEN17 masked)")
+        axs[1].axis('off')
+        plt.tight_layout()
+        st.pyplot(fig)
+        return her2_channel, cen17_channel
+
+    def apply_clahe_sig(image_channel, label="Channel", key_prefix=""):
+        st.write(f"CLAHE diterapkan pada: **{label}**")
+
+        clip_limit = st.number_input(
+            "Clip Limit (manual input)",
+            min_value=0.001,
+            max_value=0.05,
+            value=0.007,
+            step=0.001,
+            format="%.3f",
+            key=f"{key_prefix}_clip_limit"
+        )
+        im_clahe = exposure.equalize_adapthist(
+            image_channel,
+            clip_limit=clip_limit,
+            kernel_size=(32, 32)
+        )
+        hist_clahe, bins_clahe = exposure.histogram(im_clahe)
+        # Pilih cmap dan warna histogram
+        label_lower = label.lower()
+        if "her2" in label_lower:
+            cmap = "Reds"
+            line_color = "red"
+        elif "cen17" in label_lower:
+            cmap = "Greens"
+            line_color = "green"
+        else:
+            cmap = "gray"
+            line_color = "black"
+
+        # Plot citra + histogram
+        fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+        axs[0].imshow(im_clahe, cmap=cmap)
+        axs[0].set_title(f'CLAHE Result ({label})')
+        axs[0].axis('off')
+        axs[1].plot(bins_clahe, hist_clahe, color=line_color)
+        axs[1].set_title(f'Histogram after CLAHE ({label})')
+        axs[1].set_xlabel('Intensity')
+        axs[1].set_ylabel('Pixel Count')
+        axs[1].grid(True)
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        return im_clahe
+
+    def stretch_channel(channel, label="Channel", cmap="gray", key_prefix=""):
+        st.subheader(f"{label} – Intensity Stretching")
+        stretch_min = st.number_input(
+            "Stretch range (manual input)",
+            min_value=0.2,
+            max_value=0.7,
+            value=0.33,
+            step=0.01,
+            format="%.2f",
+            key=f"{key_prefix}_stretch_min"
+        )
+        stretched = rescale_intensity(channel, in_range=(stretch_min, 1.0))
+
+        fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+        axs[0].imshow(channel, cmap=cmap)
+        axs[0].set_title(f"{label} Original")
+        axs[0].axis('off')
+
+        axs[1].imshow(stretched, cmap=cmap)
+        axs[1].set_title(f"{label} Stretched (min={stretch_min})")
+        axs[1].axis('off')
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        return stretched
+
+    def detect_and_plot_signal_coords(image_rgb, her2_stretched, cen17_stretched,
+                                    default_thresh_min=0.33, thresh_max=1.0,
+                                    key_prefix="fish"):
+        """
+        Mendeteksi dan memvisualisasikan koordinat titik sinyal HER2 dan CEN17 dari hasil stretching.
+        """
+        col1, col2 = st.columns(2)
+        with col1:
+            her2_min = st.number_input(
+                f"Threshold Minimum HER2 ({key_prefix})", 
+                min_value=0.0, max_value=1.0,
+                value=default_thresh_min, step=0.01, format="%.2f",
+                key=f"{key_prefix}_her2_thresh"
+            )
+        with col2:
+            cen17_min = st.number_input(
+                f"Threshold Minimum CEN17 ({key_prefix})", 
+                min_value=0.0, max_value=1.0,
+                value=default_thresh_min, step=0.01, format="%.2f",
+                key=f"{key_prefix}_cen17_thresh"
+            )
+
+        # Dapatkan koordinat titik sinyal
+        her2_coords = np.argwhere((her2_stretched >= her2_min) & (her2_stretched <= thresh_max))
+        cen17_coords = np.argwhere((cen17_stretched >= cen17_min) & (cen17_stretched <= thresh_max))
+
+        # Visualisasi
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.imshow(image_rgb)
+
+        if her2_coords.size > 0:
+            ax.scatter(
+                her2_coords[:, 1], her2_coords[:, 0],
+                s=5, facecolors='none', edgecolors='red', linewidths=0.5, label='HER2'
+            )
+        if cen17_coords.size > 0:
+            ax.scatter(
+                cen17_coords[:, 1], cen17_coords[:, 0],
+                s=5, facecolors='none', edgecolors='lime', linewidths=0.5, label='CEN17'
+            )
+
+        ax.set_title("Titik Sinyal Terdeteksi Berdasarkan Threshold Manual")
+        ax.axis('off')
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(dict(zip(labels, handles)).values(), dict(zip(labels, handles)).keys(), loc='upper right', fontsize=8)
+        plt.tight_layout()
+        st.pyplot(fig)
+
+        return her2_coords, cen17_coords
+
+    def analyze_her2_cen17_ratio(labels_ws, her2_coords, cen17_coords):
+        """
+        Menganalisis jumlah sinyal HER2 dan CEN17 dalam setiap region dari hasil watershed.
+        """
+        # Persiapan
+        label_map = labels_ws
+        regions = regionprops(label_map)
+
+        her2_map = np.zeros_like(label_map, dtype=int)
+        cen17_map = np.zeros_like(label_map, dtype=int)
+
+        # Tandai posisi titik sinyal di peta
+        her2_map[her2_coords[:, 0], her2_coords[:, 1]] = 1
+        cen17_map[cen17_coords[:, 0], cen17_coords[:, 1]] = 1
+
+        # List hasil
+        region_ids, her2_counts, cen17_counts, ratios, statuses = [], [], [], [], []
+
+        # Loop per region
+        for region in regions:
+            region_id = region.label
+            coords = region.coords
+
+            h_count = her2_map[coords[:, 0], coords[:, 1]].sum()
+            c_count = cen17_map[coords[:, 0], coords[:, 1]].sum()
+            ratio = h_count / c_count if c_count > 0 else 0
+
+            # Status HER2
+            if ratio > 2.0:
+                status = "HER2-Positive"
+            elif 1.8 <= ratio <= 2.0:
+                status = "Equivocal"
+            else:
+                status = "HER2-Negative"
+
+            region_ids.append(region_id)
+            her2_counts.append(h_count)
+            cen17_counts.append(c_count)
+            ratios.append(ratio)
+            statuses.append(status)
+
+        # Buat DataFrame
+        df_ratio = pd.DataFrame({
+            "Region": region_ids,
+            "HER2_Count": her2_counts,
+            "CEN17_Count": cen17_counts,
+            "HER2/CEN17_Ratio": ratios,
+            "HER2_Status": statuses
+        })
+
+        # Tampilkan sebagai scrollable dataframe
+        st.dataframe(df_ratio.style.format({'HER2/CEN17_Ratio': '{:.2f}'}), height=400)
+
+        # Opsional: filter positif
+        st.markdown("**Region HER2-Positive**")
+        st.dataframe(df_ratio[df_ratio['HER2_Status'] == 'HER2-Positive'])
+        return df_ratio
+
+    def visualize_her2_cen17_classification(im, labels_ws, her2_coords, cen17_coords, df_ratio):
+        """
+        Menampilkan visualisasi hasil klasifikasi HER2/CEN17 dengan bounding box dan overlay sinyal.
+        """
+        # Buat boundary dan overlay
+        boundaries = find_boundaries(labels_ws, mode='inner')
+        overlay_img = label2rgb(labels_ws, image=im, bg_label=0)
+        regions = measure.regionprops(labels_ws)
+
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.imshow(im)  # Citra asli
+        ax.imshow(boundaries, cmap='gray', alpha=0.5)  # Garis boundary semi-transparan
+
+        # Titik-titik sinyal
+        if her2_coords.shape[0] > 0:
+            ax.scatter(
+                her2_coords[:, 1], her2_coords[:, 0],
+                s=5, facecolors='none', edgecolors='red', linewidths=0.5, label='HER2')
+
+        if cen17_coords.shape[0] > 0:
+            ax.scatter(
+                cen17_coords[:, 1], cen17_coords[:, 0],
+                s=5, facecolors='none', edgecolors='lime', linewidths=0.5, label='CEN17')
+
+        # Bounding box + label per sel
+        for i, region in enumerate(regions):
+            minr, minc, maxr, maxc = region.bbox
+            cy, cx = region.centroid
+
+            status = df_ratio.loc[df_ratio["Region"] == region.label, "HER2_Status"].values[0]
+            color_box = {
+                'HER2-Positive': 'red',
+                'Equivocal': 'yellow',
+                'HER2-Negative': 'green'}[status]
+
+            rect = plt.Rectangle((minc, minr), maxc - minc, maxr - minr,
+                                fill=False, edgecolor=color_box, linewidth=1.2)
+            ax.add_patch(rect)
+            ax.plot(cx, cy, 'o', color=color_box, markersize=4)
+            ax.text(cx, cy, f'{region.label}', color='white', fontsize=6, ha='center', va='center')
+
+        # Legend
+        handles, labels = ax.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=8)
+
+        ax.set_title("Visualisasi Status HER2/CEN17 + Titik Sinyal")
+        ax.axis('off')
+        plt.tight_layout()
+        st.pyplot(fig)
+    
+    # ========== FISH ANALYSIS TAB ==========
+    with fish_tab:
+        if uploaded_fish_image is not None:
+            # Load image from uploaded file
+            im = load_uploaded_image(uploaded_fish_image)
+            
+            if im is not None:
+                st.image(im, caption=f"Citra FISH RGB Asli - {uploaded_fish_image.name}", width=500)
+                
+                # --- PROSES ---
+                st.subheader("1. Histogram Analysis: 3 channel RGB")
+                r, g, b = plot_rgb_histogram(im, key_prefix="fish")   # untuk tab FISH
+                
+                st.subheader("2. Preprocessing: CLAHE")
+                b_clahe = apply_clahe(b, label="CLAHE on Blue Channel (FISH)", key_prefix="fish_b")
+                
+                st.subheader("3. Segmentasi: Otsu Thresholding")
+                binary_mask = apply_otsu_threshold(b_clahe, title="Threshold FISH", is_dish=False)
+                
+                st.subheader("4. Filtering dan Pelabelan")
+                image_segmented, labels, nlabels = filter_and_label_cells(binary_mask, key_prefix="fish")
+                
+                st.subheader("5. Watershed Segmentation")
+                labels_ws, boundaries_ws, overlay_img = watershed_segmentation(image_segmented, im, key_prefix="fish")
+                
+                st.subheader("6. Evaluasi Citra terhadap Ground Truth")
+                if uploaded_fish_gt is not None:
+                    # Load ground truth image
+                    gt_image = load_uploaded_image(uploaded_fish_gt)
+                    if gt_image is not None:
+                        # Convert to grayscale for evaluation
+                        gt_gray = cv2.cvtColor(gt_image, cv2.COLOR_RGB2GRAY)
+                        # Evaluate segmentation result
+                        evaluate_segmentation_result(gt_gray, labels_ws > 0)
+                    else:
+                        st.error("Error loading ground truth image")
+                else:
+                    st.warning("Please upload a ground truth image for evaluation")
+                
+                st.header("**ANALISIS KLASIFIKASI SINYAL HER2 DAN CEN17**")
+                st.subheader("1. Plot channel tiap sinyal")
+                her2_channel, cen17_channel = plot_chan_signal(im)
+                
+                st.subheader("2. Preprocessing : CLAHE")
+                her2_clahe = apply_clahe_sig(her2_channel, label="HER2 (Red)", key_prefix="her2")
+                cen17_clahe = apply_clahe_sig(cen17_channel, label="CEN17 (Green)", key_prefix="cen17")
+                
+                st.subheader("3. Stretching aim to get the signal")
+                her2_stretched = stretch_channel(her2_channel, label="HER2", cmap="Reds", key_prefix="her2")
+                cen17_stretched = stretch_channel(cen17_channel, label="CEN17", cmap="Greens", key_prefix="cen17")
+                
+                st.subheader("4. Deteksi Titik Sinyal dari Stretching")
+                her2_coordsF, cen17_coordsF = detect_and_plot_signal_coords(im, her2_stretched, cen17_stretched, key_prefix="fish")
+                
+                st.subheader("5. Analisis Rasio HER2/CEN17 per Sel")
+                df_ratio = analyze_her2_cen17_ratio(labels_ws, her2_coordsF, cen17_coordsF)
+                
+                st.subheader("6. Visualisasi Hasil Klasifikasi HER2/CEN17")
+                visualize_her2_cen17_classification(im, labels_ws, her2_coordsF, cen17_coordsF, df_ratio)
+            else:
+                st.error("Error loading FISH image")
+        else:
+            st.warning("Please upload a FISH image file to start analysis")
+
+    # ========== DISH ANALYSIS TAB ==========
+    with dish_tab:
+        st.subheader("Dual In Situ Hybridization (DISH)")
+        
+        if uploaded_dish_image is not None:
+            # Load image from uploaded file
+            im2 = load_uploaded_image(uploaded_dish_image)
+            
+            if im2 is not None:
+                st.image(im2, caption=f"Citra DISH RGB Asli - {uploaded_dish_image.name}", width=500)
+                
+                ####--- PROSES --- ####
+                st.subheader("1. Histogram Analysis: 3 channel RGB")
+                rD, gD, bD = plot_rgb_histogram(im2, key_prefix="dish")   # untuk tab DISH
+                
+                st.subheader("2. Preprocessing: CLAHE")
+                r_clahe = apply_clahe(rD, label="CLAHE on Red Channel (DISH)", key_prefix="dish_r")
+                
+                st.subheader("3. Segmentasi: Otsu Thresholding")
+                binary_mask_D = apply_otsu_threshold(r_clahe, title="Threshold DISH", is_dish=True)
+                
+                st.subheader("4. Filtering dan Pelabelan")
+                image_segmented_D, labelsD, nlabelsD = filter_and_label_cells(binary_mask_D, key_prefix="dish")
+                
+                st.subheader("5. Watershed Segmentation")
+                labels_ws_D, boundaries_ws_D, overlay_img_D = watershed_segmentation(image_segmented_D, im2, key_prefix="dish")
+                
+                st.subheader("6. Evaluasi Citra terhadap Ground Truth")
+                if uploaded_dish_gt is not None:
+                    # Load ground truth image
+                    gt_image_D = load_uploaded_image(uploaded_dish_gt)
+                    if gt_image_D is not None:
+                        # Convert to grayscale for evaluation
+                        gt_gray_D = cv2.cvtColor(gt_image_D, cv2.COLOR_RGB2GRAY)
+                        # Evaluate segmentation result
+                        evaluate_segmentation_result(gt_gray_D, labels_ws_D > 0)
+                    else:
+                        st.error("Error loading DISH ground truth image")
+                else:
+                    st.warning("Please upload a ground truth image for evaluation")
+                
+                st.header("**ANALISIS KLASIFIKASI SINYAL HER2 DAN CEN17 PADA CITRA DISH**")
+                st.subheader("1. Plot channel tiap sinyal")
+                her2_channelD, cen17_channelD = extract_and_plot_dish_signal_channels(im2, cen17_mask_thresh=0.1)
+                
+                st.subheader("2. Stretching aim to get the signal")
+                cen17_stretchedD = stretch_channel(her2_channelD, label="CEN17 DISH", cmap="Reds", key_prefix="her2D")
+                her2_stretchedD = stretch_channel(cen17_channelD, label="HER2 DISH", cmap="Greens", key_prefix="cen17D")
+                
+                st.subheader("3. Deteksi Titik Sinyal dari Stretching DISH")
+                her2_coordsD, cen17_coordsD = detect_and_plot_signal_coords(im2, her2_stretchedD, cen17_stretchedD, key_prefix="dish")
+                
+                st.subheader("4. Analisis Rasio HER2/CEN17 per Sel")
+                df_ratioD = analyze_her2_cen17_ratio(labels_ws_D, her2_coordsD, cen17_coordsD)
+                
+                st.subheader("5. Visualisasi Hasil Klasifikasi HER2/CEN17")
+                visualize_her2_cen17_classification(im2, labels_ws_D, her2_coordsD, cen17_coordsD, df_ratioD)
+            else:
+                st.error("Error loading DISH image")
+        else:
+            st.warning("Please upload a DISH image file to start analysis")
+    
+    # ========== COMPARISON SECTION ==========
+    st.markdown("---")
+    st.subheader("🔬 FISH vs DISH Comparison")
+    
+    # Create comparison info
+    comparison_col1, comparison_col2 = st.columns(2)
+    
+    with comparison_col1:
+        st.markdown("### FISH (Fluorescence In Situ Hybridization)")
+        st.markdown("""
+        **Advantages:**
+        - Higher sensitivity and specificity
+        - Better signal-to-noise ratio
+        - More precise quantification
+        - Standard method for HER2 testing
+        
+        **Characteristics:**
+        - Fluorescent probes (Red: HER2, Green: CEN17)
+        - Requires fluorescence microscopy
+        - DAPI nuclear counterstain (Blue)
+        - Automated analysis available
+        """)
+    
+    with comparison_col2:
+        st.markdown("### DISH (Dual In Situ Hybridization)")
+        st.markdown("""
+        **Advantages:**
+        - Uses standard brightfield microscopy
+        - Permanent slides (no fading)
+        - Cost-effective
+        - Can be reviewed by pathologists
+        
+        **Characteristics:**
+        - Chromogenic detection (Brown: HER2, Blue: CEN17)
+        - Standard H&E-like appearance
+        - Easier integration with routine workflow
+        - Manual counting often required
+        """)
+    
+    # Clinical guidelines
+    st.markdown("---")
+    st.subheader("📋 Clinical Guidelines")
+    
+    guidelines_col1, guidelines_col2 = st.columns(2)
+    
+    with guidelines_col1:
+        st.markdown("### HER2 Testing Guidelines")
+        st.markdown("""
+        **ASCO/CAP Guidelines:**
+        - HER2-Positive: Ratio ≥ 2.0
+        - Equivocal: Ratio 1.8-2.0
+        - HER2-Negative: Ratio < 1.8
+        
+        **Quality Requirements:**
+        - Count minimum 20 cells
+        - Ensure adequate signal intensity
+        - Proper controls required
+        """)
+    
+    with guidelines_col2:
+        st.markdown("### Clinical Actions")
+        st.markdown("""
+        **HER2-Positive:**
+        - Trastuzumab (Herceptin) therapy
+        - Pertuzumab combination
+        - T-DM1 for resistance
+        
+        **Equivocal Results:**
+        - Repeat testing recommended
+        - Consider alternative methods
+        - Clinical correlation required
+        """)
+    # Footer
+    st.markdown("---")
+    st.markdown("*FISH and DISH Analyzer - Advanced Medical Image Analysis Tool*")
 # Footer (shown on all tabs)
 st.markdown("---")
-st.caption("Edge Detection Analyzer - Created by Yohanes")
+st.caption("Medical Image Analyzer - Created by Yohanes")
