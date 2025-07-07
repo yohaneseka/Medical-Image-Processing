@@ -26,7 +26,7 @@ import cv2
 import imageio.v2 as imageio
 
 st.set_page_config(
-    page_title="Edge Detection Analyzer",
+    page_title="All Of Medical Image Processing Assignments",
     page_icon="🔍",
     layout="wide"
 )
@@ -1526,13 +1526,10 @@ elif task_choice == "Final Project":
             return image
         
         return None   
-    # Create tabs for better organization
     fish_tab, dish_tab = st.tabs(["🔬 FISH Analysis", "🎨 DISH Analysis"])
     
     def plot_histogram_with_image(image, title="Histogram", colormap="gray"):
-        # Buat 2 kolom berdampingan
         col1, col2 = st.columns(2)
-        # Pastikan image uint8
         if image.dtype != np.uint8:
             image_disp = (image * 255).astype(np.uint8) if image.max() <= 1.0 else image.astype(np.uint8)
         else:
@@ -1591,9 +1588,7 @@ elif task_choice == "Final Project":
             return r, g, b
 
 
-    # --- Image Preprocessing ---
     def apply_clahe(image_channel, label="CLAHE Result", key_prefix=""):
-        # Slider dengan key unik berdasarkan konteks (FISH/DISH)
         value_cl = st.slider(
             "Choose Clip Limit value",
             min_value=0.001,
@@ -1603,12 +1598,10 @@ elif task_choice == "Final Project":
             key=f"{key_prefix}_clip_limit"
         )
 
-        # Terapkan CLAHE
         im_clahe = exposure.equalize_adapthist(image_channel, clip_limit=value_cl)
-        # Histogram
+
         hist_clahe, bins_clahe = exposure.histogram(im_clahe)
 
-        # Plot hasil CLAHE dan histogram
         fig, axs = plt.subplots(1, 2, figsize=(12, 5))
         axs[0].imshow(im_clahe, cmap='gray')
         axs[0].set_title(f'{label}')
@@ -1629,13 +1622,11 @@ elif task_choice == "Final Project":
         title       : judul plot
         is_dish     : True jika jenis citra DISH (background putih)
         """
-        # Pastikan dalam uint8
         if image.max() <= 1.0:
             image_uint = (image * 255).astype(np.uint8)
         else:
             image_uint = image.astype(np.uint8)
 
-        # Thresholding Otsu
         thresh_val = filters.threshold_otsu(image_uint)
         if is_dish:
             binary_mask = image_uint < thresh_val  # background terang → ambil gelap
@@ -1664,7 +1655,7 @@ elif task_choice == "Final Project":
 
     def filter_and_label_cells(binary_mask, key_prefix="fish"):
         st.markdown("### Parameter Filtering dan Morphology")
-        # Slider min size
+
         min_obj_size = st.number_input(
             "Minimum Object Size (remove_small_objects)",
             min_value=100,
@@ -1690,18 +1681,16 @@ elif task_choice == "Final Project":
             key=f"{key_prefix}_smooth"
         )
 
-        # Step 1: remove small objects
         mask_no_small = morphology.remove_small_objects(binary_mask, min_size=min_obj_size)
-        # Step 2: fill holes
+
         mask_filled = np.logical_not(
             morphology.remove_small_objects(np.logical_not(mask_no_small), min_size=min_hole_size))
-        # Step 3: morphological closing (haluskan kontur)
+
         if smooth_radius > 0:
             mask_smoothed = morphology.binary_closing(mask_filled, morphology.disk(smooth_radius))
         else:
             mask_smoothed = mask_filled.copy()
 
-        # Labeling
         labels, nlabels = ndi.label(mask_smoothed)
         rand_cmap = ListedColormap(np.random.rand(256, 3))
         labels_for_display = np.where(labels > 0, labels, np.nan)
@@ -1732,7 +1721,6 @@ elif task_choice == "Final Project":
     def watershed_segmentation(image_segmented, image, key_prefix="fish", show_plot=True):
         st.markdown("### Parameter Watershed")
 
-        # Nilai default disesuaikan berdasarkan jenis citra
         sigma_default = 1.5 if key_prefix == "fish" else 1.8
         min_dist_default = 30 if key_prefix == "fish" else 60
         footprint_default = 20 if key_prefix == "fish" else 21
@@ -1753,24 +1741,21 @@ elif task_choice == "Final Project":
             key=f"{key_prefix}_footprint"
         )
 
-        # Step 1: Distance transform & Gaussian smoothing
         distance = ndi.distance_transform_edt(image_segmented)
         distance_smooth = gaussian(distance, sigma=sigma)
-        # Step 2: Cari koordinat seed (local maxima)
         coordinates = feature.peak_local_max(
             distance_smooth,
             labels=image_segmented,
             min_distance=min_distance,
             footprint=np.ones((footprint_size, footprint_size))
         )
-        # Step 3: Buat mask seed
         local_maxi = np.zeros_like(distance, dtype=bool)
         local_maxi[tuple(coordinates.T)] = True
-        # Step 4: Label markers
+   
         markers = measure.label(local_maxi)
-        # Step 5: Watershed segmentation
+
         labels_ws = segmentation.watershed(-distance, markers, mask=image_segmented)
-        # Step 6: Buat boundary dan overlay
+
         boundaries = find_boundaries(labels_ws, mode='inner')
         thick_boundaries = binary_dilation(boundaries, disk(1))
 
@@ -1817,27 +1802,22 @@ elif task_choice == "Final Project":
 
     def evaluate_segmentation_result(gt_array, segmented_mask):
         try:
-            # Convert ground truth to binary if needed
             if len(gt_array.shape) == 3:
                 gt_binary = cv2.cvtColor(gt_array, cv2.COLOR_RGB2GRAY)
             else:
                 gt_binary = gt_array.copy()
             
-            # Threshold ground truth to binary
             _, gt_binary = cv2.threshold(gt_binary, 127, 255, cv2.THRESH_BINARY)
             gt_binary = gt_binary > 0
             
-            # Convert segmented mask to boolean if needed
             if segmented_mask.dtype != bool:
                 segmented_mask = segmented_mask > 0
             
-            # Ensure same size
             if gt_binary.shape != segmented_mask.shape:
                 gt_binary = cv2.resize(gt_binary.astype(np.uint8), 
                                     (segmented_mask.shape[1], segmented_mask.shape[0]))
                 gt_binary = gt_binary > 0
             
-            # Calculate metrics
             intersection = np.logical_and(gt_binary, segmented_mask)
             union = np.logical_or(gt_binary, segmented_mask)
             
@@ -1870,14 +1850,12 @@ elif task_choice == "Final Project":
             with col4:
                 st.metric("F1 Score", f"{f1:.4f}")
             
-            # Additional metrics
             col5, col6 = st.columns(2)
             with col5:
                 st.metric("Accuracy", f"{accuracy:.4f}")
             with col6:
-                st.metric("Dice Score", f"{f1:.4f}")  # Dice = F1 for binary segmentation
-            
-            # Display comparison images
+                st.metric("Dice Score", f"{f1:.4f}")  
+                
             fig, axes = plt.subplots(1, 3, figsize=(15, 5))
             
             axes[0].imshow(gt_binary, cmap='gray')
@@ -1888,7 +1866,6 @@ elif task_choice == "Final Project":
             axes[1].set_title('Segmentation Result')
             axes[1].axis('off')
             
-            # Overlay comparison
             overlay = np.zeros((gt_binary.shape[0], gt_binary.shape[1], 3))
             overlay[:, :, 0] = gt_binary.astype(float)  # Red for ground truth
             overlay[:, :, 1] = segmented_mask.astype(float)  # Green for segmented
@@ -1902,7 +1879,6 @@ elif task_choice == "Final Project":
             st.pyplot(fig)
             plt.close()
             
-            # Summary interpretation
             st.markdown("### 📋 Results Interpretation")
             if iou > 0.7:
                 st.success("🎉 Excellent segmentation quality!")
@@ -1913,7 +1889,6 @@ elif task_choice == "Final Project":
             else:
                 st.error("❌ Poor segmentation quality")
                 
-            # Detailed breakdown
             with st.expander("📈 Detailed Metrics Explanation"):
                 st.markdown(f"""
                 **IoU (Intersection over Union)**: {iou:.4f}
@@ -1950,9 +1925,7 @@ elif task_choice == "Final Project":
             st.info("Please check if the ground truth image format is correct")
             return None
 
-    ## -------- UNTUK ANALISIS SINYAL HER2 DAN CEN17 -----------##
     def plot_chan_signal (im):
-        # Pastikan image RGB bertipe float 0-1
         if im.dtype != np.float32 and im.dtype != np.float64:
             image_rgb = im / 255.0
         else:
@@ -1975,18 +1948,16 @@ elif task_choice == "Final Project":
         return her2_channel, cen17_channel
 
     def extract_and_plot_dish_signal_channels(im, cen17_mask_thresh=0.1):
-        # Konversi ke float [0–1] jika perlu
+      
         image_rgb = im / 255.0 if im.dtype != np.float32 and im.dtype != np.float64 else im.copy()
-        # CEN17: Pink = R - G
+
         cen17_channel = np.clip(image_rgb[:, :, 0] - image_rgb[:, :, 1], 0, 1)
-        # Grayscale → sumber HER2
+
         grayscale = rgb2gray(image_rgb)
-        # Buat masking → titik yang terlalu merah (CEN17)
+      
         mask = cen17_channel > cen17_mask_thresh
-        # HER2 = grayscale + suppress CEN17 → diputihkan (1.0)
         her2_channel = np.copy(grayscale)
-        her2_channel[mask] = 1.0  # diputihkan karena latar belakang putih
-        # Inversi agar sinyal CEN17 menjadi terang (1.0 → 0.0 dan sebaliknya)
+        her2_channel[mask] = 1.0 
         her2_channel = 1.0 - her2_channel
         
         fig, axs = plt.subplots(1, 2, figsize=(10, 4))
@@ -2030,7 +2001,6 @@ elif task_choice == "Final Project":
             cmap = "gray"
             line_color = "black"
 
-        # Plot citra + histogram
         fig, axs = plt.subplots(1, 2, figsize=(12, 5))
         axs[0].imshow(im_clahe, cmap=cmap)
         axs[0].set_title(f'CLAHE Result ({label})')
@@ -2093,11 +2063,9 @@ elif task_choice == "Final Project":
                 key=f"{key_prefix}_cen17_thresh"
             )
 
-        # Dapatkan koordinat titik sinyal
         her2_coords = np.argwhere((her2_stretched >= her2_min) & (her2_stretched <= thresh_max))
         cen17_coords = np.argwhere((cen17_stretched >= cen17_min) & (cen17_stretched <= thresh_max))
 
-        # Visualisasi
         fig, ax = plt.subplots(figsize=(10, 10))
         ax.imshow(image_rgb)
 
@@ -2122,24 +2090,18 @@ elif task_choice == "Final Project":
         return her2_coords, cen17_coords
 
     def analyze_her2_cen17_ratio(labels_ws, her2_coords, cen17_coords):
-        """
-        Menganalisis jumlah sinyal HER2 dan CEN17 dalam setiap region dari hasil watershed.
-        """
-        # Persiapan
+    
         label_map = labels_ws
         regions = regionprops(label_map)
 
         her2_map = np.zeros_like(label_map, dtype=int)
         cen17_map = np.zeros_like(label_map, dtype=int)
 
-        # Tandai posisi titik sinyal di peta
         her2_map[her2_coords[:, 0], her2_coords[:, 1]] = 1
         cen17_map[cen17_coords[:, 0], cen17_coords[:, 1]] = 1
 
-        # List hasil
         region_ids, her2_counts, cen17_counts, ratios, statuses = [], [], [], [], []
 
-        # Loop per region
         for region in regions:
             region_id = region.label
             coords = region.coords
@@ -2148,7 +2110,6 @@ elif task_choice == "Final Project":
             c_count = cen17_map[coords[:, 0], coords[:, 1]].sum()
             ratio = h_count / c_count if c_count > 0 else 0
 
-            # Status HER2
             if ratio > 2.0:
                 status = "HER2-Positive"
             elif 1.8 <= ratio <= 2.0:
@@ -2162,7 +2123,6 @@ elif task_choice == "Final Project":
             ratios.append(ratio)
             statuses.append(status)
 
-        # Buat DataFrame
         df_ratio = pd.DataFrame({
             "Region": region_ids,
             "HER2_Count": her2_counts,
@@ -2171,28 +2131,21 @@ elif task_choice == "Final Project":
             "HER2_Status": statuses
         })
 
-        # Tampilkan sebagai scrollable dataframe
         st.dataframe(df_ratio.style.format({'HER2/CEN17_Ratio': '{:.2f}'}), height=400)
 
-        # Opsional: filter positif
         st.markdown("**Region HER2-Positive**")
         st.dataframe(df_ratio[df_ratio['HER2_Status'] == 'HER2-Positive'])
         return df_ratio
 
     def visualize_her2_cen17_classification(im, labels_ws, her2_coords, cen17_coords, df_ratio):
-        """
-        Menampilkan visualisasi hasil klasifikasi HER2/CEN17 dengan bounding box dan overlay sinyal.
-        """
-        # Buat boundary dan overlay
+
         boundaries = find_boundaries(labels_ws, mode='inner')
         overlay_img = label2rgb(labels_ws, image=im, bg_label=0)
         regions = measure.regionprops(labels_ws)
 
         fig, ax = plt.subplots(figsize=(10, 10))
-        ax.imshow(im)  # Citra asli
-        ax.imshow(boundaries, cmap='gray', alpha=0.5)  # Garis boundary semi-transparan
-
-        # Titik-titik sinyal
+        ax.imshow(im)  
+        ax.imshow(boundaries, cmap='gray', alpha=0.5)  
         if her2_coords.shape[0] > 0:
             ax.scatter(
                 her2_coords[:, 1], her2_coords[:, 0],
@@ -2230,7 +2183,6 @@ elif task_choice == "Final Project":
         plt.tight_layout()
         st.pyplot(fig)
     
-    # ========== FISH ANALYSIS TAB ==========
     with fish_tab:
         col1, col2 = st.columns(2)
         with col1:
@@ -2255,11 +2207,9 @@ elif task_choice == "Final Project":
             
             if im is not None:
                 st.image(im, caption=f"Citra FISH RGB Asli - {uploaded_fish_image.name}", width=500)
-                
-                # --- PROSES ---
+             
                 st.subheader("1. Histogram Analysis: 3 channel RGB")
-                r, g, b = plot_rgb_histogram(im, key_prefix="fish")   # untuk tab FISH
-                
+                r, g, b = plot_rgb_histogram(im, key_prefix="fish")  
                 st.subheader("2. Preprocessing: CLAHE")
                 b_clahe = apply_clahe(b, label="CLAHE on Blue Channel (FISH)", key_prefix="fish_b")
                 
@@ -2274,12 +2224,10 @@ elif task_choice == "Final Project":
                 
                 st.subheader("6. Evaluasi Citra terhadap Ground Truth")
                 if uploaded_fish_gt is not None:
-                    # Load ground truth image
+                   
                     gt_image = load_uploaded_image(uploaded_fish_gt)
                     if gt_image is not None:
-                        # Convert to grayscale for evaluation
                         gt_gray = cv2.cvtColor(gt_image, cv2.COLOR_RGB2GRAY)
-                        # Evaluate segmentation result
                         evaluate_segmentation_result(gt_gray, labels_ws > 0)
                     else:
                         st.error("Error loading ground truth image")
@@ -2311,7 +2259,6 @@ elif task_choice == "Final Project":
         else:
             st.warning("Please upload a FISH image file to start analysis")
 
-    # ========== DISH ANALYSIS TAB ==========
     with dish_tab:
         st.subheader("Dual In Situ Hybridization (DISH)")
         col1, col2 = st.columns(2)
@@ -2330,15 +2277,13 @@ elif task_choice == "Final Project":
             )
             
         if uploaded_dish_image is not None:
-            # Load image from uploaded file
             im2 = load_uploaded_image(uploaded_dish_image)
             
             if im2 is not None:
                 st.image(im2, caption=f"Citra DISH RGB Asli - {uploaded_dish_image.name}", width=500)
                 
-                ####--- PROSES --- ####
                 st.subheader("1. Histogram Analysis: 3 channel RGB")
-                rD, gD, bD = plot_rgb_histogram(im2, key_prefix="dish")   # untuk tab DISH
+                rD, gD, bD = plot_rgb_histogram(im2, key_prefix="dish") 
                 
                 st.subheader("2. Preprocessing: CLAHE")
                 r_clahe = apply_clahe(rD, label="CLAHE on Red Channel (DISH)", key_prefix="dish_r")
@@ -2357,9 +2302,9 @@ elif task_choice == "Final Project":
                     # Load ground truth image
                     gt_image_D = load_uploaded_image(uploaded_dish_gt)
                     if gt_image_D is not None:
-                        # Convert to grayscale for evaluation
+     
                         gt_gray_D = cv2.cvtColor(gt_image_D, cv2.COLOR_RGB2GRAY)
-                        # Evaluate segmentation result
+               
                         evaluate_segmentation_result(gt_gray_D, labels_ws_D > 0)
                     else:
                         st.error("Error loading DISH ground truth image")
@@ -2387,11 +2332,9 @@ elif task_choice == "Final Project":
         else:
             st.warning("Please upload a DISH image file to start analysis")
     
-    # ========== COMPARISON SECTION ==========
     st.markdown("---")
     st.subheader("🔬 FISH vs DISH Comparison")
     
-    # Create comparison info
     comparison_col1, comparison_col2 = st.columns(2)
     
     with comparison_col1:
@@ -2459,9 +2402,9 @@ elif task_choice == "Final Project":
         - Consider alternative methods
         - Clinical correlation required
         """)
-    # Footer
+
     st.markdown("---")
     st.markdown("*FISH and DISH Analyzer - Advanced Medical Image Analysis Tool*")
-# Footer (shown on all tabs)
+
 st.markdown("---")
 st.caption("Medical Image Analyzer - Created by Yohanes")
